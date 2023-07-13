@@ -8,7 +8,7 @@ import userEvent from "@testing-library/user-event";
 
 import { createRouter, route } from "./routing";
 
-function developerExperienceExample() {
+test("router typing", () => {
   // const router = (
   //   <Route path="company/$companyId">
   //     <Route
@@ -91,19 +91,82 @@ function developerExperienceExample() {
     ],
   });
 
-  router.navigate({ path: "company/$companyId", params: { companyId: "1" } });
+  router.navigate({
+    path: "company/$companyId",
+    params: { companyId: "1" },
+  });
+  router.navigate({
+    path: "company/$companyId/user/$userId",
+    params: { companyId: "1", userId: "2" },
+  });
   router.navigate({
     path: "company/$companyId/user/$userId/post",
+    params: { companyId: "1", userId: "2" },
+  });
+  router.navigate({
+    path: "company/$companyId/user/$userId/post/$postId",
+    params: { companyId: "1", userId: "2", postId: "3" },
+  });
+  router.navigate({
+    path: "company/$companyId/user/$userId/post/$postId/comments",
+    params: { companyId: "1", userId: "2", postId: "3" },
+  });
+  router.navigate({
+    path: "company/$companyId/user/$userId/post/$postId/comments/$commentId",
+    params: { companyId: "1", userId: "2", postId: "3", commentId: "4" },
+  });
+
+  router.navigate({
+    // @ts-expect-error
+    path: "",
+  });
+  router.navigate({
+    path: "company/$companyId",
+    params: {
+      // @ts-expect-error
+      companyI: "1",
+    },
+  });
+  router.navigate({
+    path: "company/$companyId/user/$userId",
     params: {
       companyId: "1",
-      userId: "2",
+      // @ts-expect-error
+      userI: "2",
     },
   });
   router.navigate({
     path: "company/$companyId/user/$userId/post",
-    params: { companyId: "", userId: "" },
+    // @ts-expect-error
+    params: { companyId: "1" },
   });
-}
+  router.navigate({
+    path: "company/$companyId/user/$userId/post/$postId",
+    params: {
+      // @ts-expect-error
+      companyId: 45,
+      userId: "2",
+      posId: "3",
+    },
+  });
+  router.navigate({
+    // @ts-expect-error
+    path: "company/$companyId/user/$userId/post/$postId/comment",
+    // @ts-expect-error
+    params: { companyId: "1", userId: "2", postId: "3" },
+  });
+  router.navigate({
+    // @ts-expect-error
+    path: "company/$companyd/user/$userId/post/$postId/comments/$commentId",
+    params: {
+      // @ts-expect-error
+      companyd: "1",
+      userId: "2",
+      postId: "3",
+      commentId: "4",
+    },
+  });
+});
 
 test("router renders root route", () => {
   const router = createRouter({
