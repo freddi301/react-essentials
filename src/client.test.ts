@@ -1,5 +1,5 @@
 import React from "react";
-import { createClient, useMutation, useQuery } from "./fetching";
+import { createClient, useMutation, useQuery } from "./client";
 
 type User = {
   id: string;
