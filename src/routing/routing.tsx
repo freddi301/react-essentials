@@ -66,18 +66,20 @@ export function createRouter<
     path,
   }: {
     path: P;
-    params: ParamsFromPath<P>;
-  }): void;
+  } & (ParamsFromPathRecursive<"", P> extends ""
+    ? { params?: ParamsFromPath<P> }
+    : { params: ParamsFromPath<P> })): void;
   Link<P extends PathsOf<RouteDefinition<Path, Search, Children>>>({
     path,
     params,
     children,
   }: {
     path: P;
-    params: ParamsFromPath<P>;
     children: React.ReactNode;
-  }): React.ReactElement;
-  Render: React.ComponentType<{}>;
+  } & (ParamsFromPathRecursive<"", P> extends ""
+    ? { params?: ParamsFromPath<P> }
+    : { params: ParamsFromPath<P> })): React.ReactElement;
+  Router: React.ComponentType<{}>;
 } {
   let current: { path?: string } = {};
   const listeners = new Set<() => void>();
@@ -93,12 +95,12 @@ export function createRouter<
     return current.path;
   };
   return {
-    navigate({ path, params }) {
+    navigate({ path, params = {} }) {
       console.log("NAVIGATE", current.path);
       current.path = rebuildPath(path, params);
       listeners.forEach((listener) => listener());
     },
-    Link({ path, params, children }) {
+    Link({ path, params = {}, children }) {
       const href = rebuildPath(path, params);
       return (
         <a
@@ -114,7 +116,7 @@ export function createRouter<
         </a>
       );
     },
-    Render({}) {
+    Router({}) {
       const current = React.useSyncExternalStore(subscribe, getSnapshot);
       console.log("CURRENT", current);
       if (current === undefined) return null;

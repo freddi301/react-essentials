@@ -181,16 +181,16 @@ test("router renders root route", () => {
     },
     children: [],
   });
-  const { container } = render(<router.Render />);
+  const { container } = render(<router.Router />);
   expect(container).toHaveTextContent("");
   act(() => {
-    router.navigate({ path: "", params: {} });
+    router.navigate({ path: "" });
   });
   expect(screen.getByText(/Heading/)).toBeInTheDocument();
 });
 
 test("router switches between two routes", async () => {
-  const router = createRouter({
+  const { Router, navigate } = createRouter({
     path: "",
     render({ children }) {
       return (
@@ -217,19 +217,19 @@ test("router switches between two routes", async () => {
       }),
     ],
   });
-  render(<router.Render />);
+  render(<Router />);
   act(() => {
-    router.navigate({ path: "", params: {} });
+    navigate({ path: "", params: {} });
   });
   expect(screen.getByText(/Heading/)).toBeInTheDocument();
   act(() => {
-    router.navigate({ path: "/a", params: {} });
+    navigate({ path: "/a", params: {} });
   });
   expect(screen.getByText(/Heading/)).toBeInTheDocument();
   expect(screen.getByText(/RouteA/)).toBeInTheDocument();
   expect(screen.queryByText(/RouteB/)).not.toBeInTheDocument();
   act(() => {
-    router.navigate({ path: "/b", params: {} });
+    navigate({ path: "/b" });
   });
   expect(screen.getByText(/Heading/)).toBeInTheDocument();
   expect(screen.getByText(/RouteB/)).toBeInTheDocument();
@@ -237,7 +237,7 @@ test("router switches between two routes", async () => {
 });
 
 test("navigation works with clicks", async () => {
-  const router = createRouter({
+  const { Router, navigate } = createRouter({
     path: "",
     render({ children }) {
       return (
@@ -245,14 +245,14 @@ test("navigation works with clicks", async () => {
           <nav>
             <button
               onClick={() => {
-                router.navigate({ path: "/a", params: {} });
+                navigate({ path: "/a", params: {} });
               }}
             >
               LinkA
             </button>
             <button
               onClick={() => {
-                router.navigate({ path: "/b", params: {} });
+                navigate({ path: "/b" });
               }}
             >
               LinkB
@@ -279,8 +279,8 @@ test("navigation works with clicks", async () => {
       }),
     ],
   });
-  render(<router.Render />);
-  act(() => router.navigate({ path: "", params: {} }));
+  render(<Router />);
+  act(() => navigate({ path: "", params: {} }));
   userEvent.click(screen.getByText(/LinkA/));
   expect(await screen.findByText(/RouteA/)).toBeInTheDocument();
   expect(screen.queryByText(/RouteB/)).not.toBeInTheDocument();
@@ -290,18 +290,16 @@ test("navigation works with clicks", async () => {
 });
 
 test("navigation works with links", async () => {
-  const router = createRouter({
+  const { Link, Router, navigate } = createRouter({
     path: "",
     render({ children }) {
       return (
         <>
           <nav>
-            <router.Link path="/a" params={{}}>
+            <Link path="/a" params={{}}>
               LinkA
-            </router.Link>
-            <router.Link path="/b" params={{}}>
-              LinkB
-            </router.Link>
+            </Link>
+            <Link path="/b">LinkB</Link>
           </nav>
           {children}
         </>
@@ -324,8 +322,8 @@ test("navigation works with links", async () => {
       }),
     ],
   });
-  render(<router.Render />);
-  act(() => router.navigate({ path: "", params: {} }));
+  render(<Router />);
+  act(() => navigate({ path: "", params: {} }));
   userEvent.click(screen.getByText(/LinkA/));
   expect(await screen.findByText(/RouteA/)).toBeInTheDocument();
   expect(screen.queryByText(/RouteB/)).not.toBeInTheDocument();
