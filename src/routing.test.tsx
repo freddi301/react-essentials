@@ -1,4 +1,4 @@
-import { Link, navigate, route } from "./routing";
+import { createRouter, route } from "./routing";
 
 //       <div>
 //         {/* <nav>
@@ -29,46 +29,88 @@ import { Link, navigate, route } from "./routing";
 //         {children}
 //       </div>
 
-const root = route({
-  path: "company/$companyId",
-  children: [
-    route({
-      path: "user/$userId",
-      render({ params: { userId } }) {
-        return (
-          <div>
-            <div>User {userId}</div>
-          </div>
-        );
-      },
-    }),
-    route({
-      path: "user/$userId/post",
-    }),
-    route({
-      path: "user/$userId/post/$postId",
-      render({ children, params: { userId, postId } }) {
-        return (
-          <div>
-            <div>User {userId}</div>
-            <div>Post {postId}</div>
-            {children}
-          </div>
-        );
-      },
-      children: [
-        route({
-          path: "comments",
-        }),
-        route({
-          path: "comments/$commentId",
-          search({ params, urlSearchParams }) {
-            return { search: urlSearchParams.get("search") ?? undefined };
-          },
-        }),
-      ],
-    }),
-  ],
-});
+// const router = (
+//   <Route path="company/$companyId">
+//     <Route
+//       path="user/$userId"
+//       render={({ params: { userId } }) => (
+//         <div>
+//           <div>User {userId}</div>
+//         </div>
+//       )}
+//     >
+//       {[]}
+//     </Route>
+//     <Route path="user/$userId/post">{[]}</Route>
+//     <Route
+//       path="user/$userId/post/$postId"
+//       render={({ children, params: { userId, postId } }) => (
+//         <div>
+//           <div>User {userId}</div>
+//           <div>Post {postId}</div>
+//           {children}
+//         </div>
+//       )}
+//     >
+//       <Route path="comments">{[]}</Route>
+//       <Route
+//         path="comments/$commentId"
+//         search={({ params, urlSearchParams }) => {
+//           return { search: urlSearchParams.get("search") ?? undefined };
+//         }}
+//       >
+//         {[]}
+//       </Route>
+//     </Route>
+//   </Route>
+// );
 
-navigate(root, "");
+const router = createRouter(
+  route({
+    path: "company/$companyId",
+    children: [
+      route({
+        path: "user/$userId",
+        render({ params: { userId } }) {
+          return (
+            <div>
+              <div>User {userId}</div>
+            </div>
+          );
+        },
+        children: [],
+      }),
+      route({
+        path: "user/$userId/post",
+        children: [],
+      }),
+      route({
+        path: "user/$userId/post/$postId",
+        render({ children, params: { userId, postId } }) {
+          return (
+            <div>
+              <div>User {userId}</div>
+              <div>Post {postId}</div>
+              {children}
+            </div>
+          );
+        },
+        children: [
+          route({
+            path: "comments",
+            children: [],
+          }),
+          route({
+            path: "comments/$commentId",
+            search({ params, urlSearchParams }) {
+              return { search: urlSearchParams.get("search") ?? undefined };
+            },
+            children: [],
+          }),
+        ],
+      }),
+    ],
+  })
+);
+
+router.navigate({ path: "company/$companyId/user/$userId/post" });
