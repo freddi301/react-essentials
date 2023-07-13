@@ -7,7 +7,8 @@ type ParamsFromPathRecursive<
   ? ParamsFromPathRecursive<Params | Field, Rest>
   : Path extends `$${infer Field}`
   ? Params | Field
-  : Path extends `${infer Part}/${infer Rest}`
+  : /* eslint-disable */
+  Path extends `${infer Part}/${infer Rest}`
   ? ParamsFromPathRecursive<Params, Rest>
   : Params;
 
@@ -24,12 +25,12 @@ type RouteDefinition<
   Children extends Array<RouteDefinition<any, any, any>> | undefined
 > = {
   path: Path;
-  search?({}: {
+  search?(_: {
     params: ParamsFromPath<Path>;
     urlSearchParams: URLSearchParams;
   }): Search;
-  validate?({}: { params: ParamsFromPath<Path>; search: Search }): boolean;
-  render?({}: {
+  validate?(_: { params: ParamsFromPath<Path>; search: Search }): boolean;
+  render?(_: {
     params: ParamsFromPath<Path>;
     search: Search;
     children: React.ReactNode;
@@ -49,6 +50,7 @@ export function route<
 
 type PathsOf<Route> = Route extends RouteDefinition<
   infer Path,
+  /* eslint-disable */
   infer Search,
   infer Children
 >
@@ -66,6 +68,7 @@ export function createRouter<
     path,
   }: {
     path: P;
+    search?: any; // TODO
   } & (ParamsFromPathRecursive<"", P> extends ""
     ? { params?: ParamsFromPath<P> }
     : { params: ParamsFromPath<P> })): void;
@@ -76,6 +79,7 @@ export function createRouter<
   }: {
     path: P;
     children: React.ReactNode;
+    search?: any; // TODO
   } & (ParamsFromPathRecursive<"", P> extends ""
     ? { params?: ParamsFromPath<P> }
     : { params: ParamsFromPath<P> })): React.ReactElement;
@@ -85,30 +89,26 @@ export function createRouter<
   const listeners = new Set<() => void>();
   const subscribe = (listener: () => void) => {
     listeners.add(listener);
-    console.log("LISTNERE ADDED", listener);
     return () => {
       listeners.delete(listener);
     };
   };
   const getSnapshot = () => {
-    console.log("GET SNAPCHOT", current.path);
     return current.path;
   };
   return {
-    navigate({ path, params = {} }) {
-      console.log("NAVIGATE", current.path);
-      current.path = rebuildPath(path, params);
+    navigate({ path, params = {}, search = {} }) {
+      current.path = rebuildPath(path, params, search);
       listeners.forEach((listener) => listener());
     },
-    Link({ path, params = {}, children }) {
-      const href = rebuildPath(path, params);
+    Link({ path, params = {}, search = {}, children }) {
+      const href = rebuildPath(path, params, search);
       return (
         <a
           href={href}
           onClick={(event) => {
             event.preventDefault();
-            console.log("LINK NAVIGATE", current.path);
-            current.path = rebuildPath(path, params);
+            current.path = href;
             listeners.forEach((listener) => listener());
           }}
         >
@@ -116,11 +116,15 @@ export function createRouter<
         </a>
       );
     },
-    Router({}) {
+    Router() {
       const current = React.useSyncExternalStore(subscribe, getSnapshot);
-      console.log("CURRENT", current);
       if (current === undefined) return null;
-      return renderRoute(root, current);
+      const [path, search = ""] = current.split("?");
+      return renderRoute(
+        root,
+        path,
+        new URLSearchParams(search)
+      ) as JSX.Element;
     },
   };
 }
@@ -133,7 +137,7 @@ function matchPath(pathDefinition: string, path: string) {
     const pathDefinitionPart = pathDefinitionParts[i];
     const pathPart = pathParts[i];
     if (pathDefinitionPart.startsWith("$")) {
-      params[pathDefinitionPart.slice(1)] = pathPart;
+      params[pathDefinitionPart.slice(1)] = decodeURIComponent(pathPart);
     } else if (pathDefinitionPart !== pathPart) {
       return null;
     }
@@ -144,28 +148,54 @@ function matchPath(pathDefinition: string, path: string) {
   };
 }
 
-function rebuildPath(pathDefinition: string, params: Record<string, string>) {
-  return pathDefinition
+function rebuildPath(
+  pathDefinition: string,
+  params: Record<string, string>,
+  search: Record<string, string>
+) {
+  let path = pathDefinition
     .split("/")
     .map((part) => {
       if (part.startsWith("$")) {
-        return params[part.slice(1)];
+        return encodeURIComponent(params[part.slice(1)]);
       } else {
         return part;
       }
     })
     .join("/");
+  if (Object.keys(search).length > 0) {
+    path += "?" + new URLSearchParams(search).toString();
+  }
+  return path;
 }
 
-function renderRoute(route: RouteDefinition<any, any, any>, path: string) {
+function renderRoute(
+  route: RouteDefinition<any, any, any>,
+  path: string,
+  urlSearchParams: URLSearchParams
+): React.ReactNode {
   const match = matchPath(route.path, path);
   if (!match) return null;
-  const children =
-    route.children?.map((child: any) => (
-      <React.Fragment key={child.path}>
-        {renderRoute(child, match.remainingPath)}
-      </React.Fragment>
-    )) ?? null;
+  let children = null;
+  if (route.children) {
+    const mostSpecific = [...route.children].sort((a, b) => {
+      const aParts = a.path.split("/");
+      const bParts = b.path.split("/");
+      return bParts.length - aParts.length;
+    });
+    for (const child of mostSpecific) {
+      children = renderRoute(child, match.remainingPath, urlSearchParams);
+      if (children) break;
+    }
+  }
   if (!route.render) return children;
-  return route.render({ params: match.params, children, search: null as any });
+  return route.render({
+    params: match.params,
+    children,
+    search:
+      route.search?.({
+        params: match.params,
+        urlSearchParams,
+      }) ?? {},
+  });
 }
