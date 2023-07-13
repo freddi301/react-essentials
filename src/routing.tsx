@@ -1,32 +1,25 @@
-type ParamsFromPath<
+type ParamsFromPathRecursive<
   Params,
   Path extends string
 > = Path extends `$${infer Field}/${infer Rest}`
-  ? ParamsFromPath<Params | Field, Rest>
+  ? ParamsFromPathRecursive<Params | Field, Rest>
   : Path extends `$${infer Field}`
   ? Params | Field
   : Path extends `${infer Part}/${infer Rest}`
-  ? ParamsFromPath<Params, Rest>
+  ? ParamsFromPathRecursive<Params, Rest>
   : Params;
+
+type ParamsFromPath<Path extends string> = ParamsFromPathRecursive<
+  "",
+  Path
+> extends ""
+  ? {}
+  : Record<Exclude<ParamsFromPathRecursive<"", Path>, "">, string>;
 
 type Route<Path extends string, Params = undefined, Search = undefined> = {
   path: Path;
   href(params: Params, search: Search): string;
 };
-
-export function createRoute<const Path extends string, Search = undefined>(
-  path: Path,
-  search?: (urlSearchParams: URLSearchParams) => Search
-): Route<
-  Path,
-  ParamsFromPath<"", Path> extends ""
-    ? undefined
-    : Record<Exclude<ParamsFromPath<"", Path>, "">, string>,
-  Search
-> {
-  // TODO: implement
-  return null as any;
-}
 
 export function Link<Params = undefined, Search = undefined>({
   to,
@@ -41,20 +34,42 @@ export function Link<Params = undefined, Search = undefined>({
   return <a href={to.href(params!, search!)}>{children}</a>;
 }
 
-type RouteShape<
-  Children extends Record<string, RouteShape<any, any, any>>,
-  Params = undefined,
-  Search = undefined
+type RouteDefinition<
+  Path extends string,
+  Search extends Record<string, any>,
+  Children extends Array<RouteDefinition<any, any, any>>
 > = {
-  search?(urlSearchParams: URLSearchParams): Search;
+  path: Path;
+  search?({}: {
+    params: ParamsFromPath<Path>;
+    urlSearchParams: URLSearchParams;
+  }): Search;
+  validate?({}: { params: ParamsFromPath<Path>; search: Search }): boolean;
   render?({}: {
-    params: Params;
+    params: ParamsFromPath<Path>;
     search: Search;
     children: React.ReactNode;
   }): React.ReactNode;
   children?: Children;
 };
 
-export function createRouter<
-  Routes extends Record<string, RouteShape<any, any, any>>
->(ruotes: Routes) {}
+export function route<
+  const Path extends string,
+  Search extends Record<string, any>,
+  Children extends Array<RouteDefinition<any, any, any>>
+>(route: RouteDefinition<Path, Search, Children>) {
+  return route;
+}
+
+type PathsOf<Route> = Route extends RouteDefinition<
+  infer Path,
+  infer Search,
+  infer Children
+>
+  ? Path | PathsOf<Children[number]>
+  : never;
+
+export function navigate<Root extends RouteDefinition<any, any, any>>(
+  root: Root,
+  path: PathsOf<Root>
+) {}
