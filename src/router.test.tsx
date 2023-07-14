@@ -47,7 +47,7 @@ test("router typing", () => {
 
   const router = createRouter({
     path: "company/$companyId",
-    children: [
+    children: (parent) => [
       route({
         path: "user/$userId",
         render({ params: { userId } }) {
@@ -57,11 +57,11 @@ test("router typing", () => {
             </div>
           );
         },
-        children: [],
+        children: (parent) => [],
       }),
       route({
         path: "user/$userId/post",
-        children: [],
+        children: (parent) => [],
       }),
       route({
         path: "user/$userId/post/$postId",
@@ -74,17 +74,17 @@ test("router typing", () => {
             </div>
           );
         },
-        children: [
+        children: (parent) => [
           route({
             path: "comments",
-            children: [],
+            children: (parent) => [],
           }),
           route({
             path: "comments/$commentId",
             search({ params, urlSearchParams }) {
               return { search: urlSearchParams.get("search") ?? undefined };
             },
-            children: [],
+            children: (parent) => [],
           }),
         ],
       }),
@@ -179,7 +179,7 @@ test("router renders root route", () => {
         </div>
       );
     },
-    children: [],
+    children: (parent) => [],
   });
   const { container } = render(<router.Router />);
   expect(container).toHaveTextContent("");
@@ -200,20 +200,20 @@ test("router switches between two routes", async () => {
         </div>
       );
     },
-    children: [
+    children: (parent) => [
       route({
         path: "a",
         render({ children }) {
           return <div>RouteA</div>;
         },
-        children: [],
+        children: (parent) => [],
       }),
       route({
         path: "b",
         render({ children }) {
           return <div>RouteB</div>;
         },
-        children: [],
+        children: (parent) => [],
       }),
     ],
   });
@@ -262,20 +262,20 @@ test("navigation works with clicks", async () => {
         </>
       );
     },
-    children: [
+    children: (parent) => [
       route({
         path: "a",
         render({ children }) {
           return <div>RouteA</div>;
         },
-        children: [],
+        children: (parent) => [],
       }),
       route({
         path: "b",
         render({ children }) {
           return <div>RouteB</div>;
         },
-        children: [],
+        children: (parent) => [],
       }),
     ],
   });
@@ -305,20 +305,20 @@ test("navigation works with links", async () => {
         </>
       );
     },
-    children: [
+    children: (parent) => [
       route({
         path: "a",
         render({ children }) {
           return <div>RouteA</div>;
         },
-        children: [],
+        children: (parent) => [],
       }),
       route({
         path: "b",
         render({ children }) {
           return <div>RouteB</div>;
         },
-        children: [],
+        children: (parent) => [],
       }),
     ],
   });
@@ -330,4 +330,125 @@ test("navigation works with links", async () => {
   userEvent.click(screen.getByText(/LinkB/));
   expect(await screen.findByText(/RouteB/)).toBeInTheDocument();
   expect(screen.queryByText(/RouteA/)).not.toBeInTheDocument();
+});
+
+test("more specific routes take precedence", async () => {
+  const { Router, navigate } = createRouter({
+    path: "",
+    children: (parent) => [
+      route({
+        path: "a",
+        render({ children }) {
+          return <div>RouteA</div>;
+        },
+        children: (parent) => [],
+      }),
+      route({
+        path: "a/b",
+        render({ children }) {
+          return <div>RouteSpecific</div>;
+        },
+        children: (parent) => [],
+      }),
+    ],
+  });
+  render(<Router />);
+  act(() => navigate({ path: "/a" }));
+  expect(await screen.findByText(/RouteA/)).toBeInTheDocument();
+  expect(screen.queryByText(/RouteSpecific/)).not.toBeInTheDocument();
+  act(() => navigate({ path: "/a/b" }));
+  expect(await screen.findByText(/RouteSpecific/)).toBeInTheDocument();
+  expect(screen.queryByText(/RouteA/)).not.toBeInTheDocument();
+});
+
+test("render method gets path params", () => {
+  const { Router, navigate } = createRouter({
+    path: "",
+    children: (parent) => [
+      route({
+        path: "a/$id",
+        render({ children, params }) {
+          return <div>RouteA {params.id}</div>;
+        },
+        children: (parent) => [],
+      }),
+    ],
+  });
+  render(<Router />);
+  act(() =>
+    navigate({ path: "/a/$id", params: { id: "complex/id with special $%?" } })
+  );
+  expect(
+    screen.getByText(/RouteA complex\/id with special \$%\?/)
+  ).toBeInTheDocument();
+});
+
+test("render method gets search params", () => {
+  const { Router, navigate } = createRouter({
+    path: "",
+    children: (parent) => [
+      route({
+        path: "a/$id",
+        search({ params, urlSearchParams }) {
+          return {
+            id: (urlSearchParams.get("searchParam") ?? "") + params.id,
+          };
+        },
+        render({ children, params, search }) {
+          return <div>RouteA {search.id}</div>;
+        },
+        children: (parent) => [],
+      }),
+    ],
+  });
+  render(<Router />);
+  act(() =>
+    navigate({
+      path: "/a/$id",
+      params: { id: "42" },
+      search: { searchParam: "666" },
+    })
+  );
+  expect(screen.getByText(/RouteA 66642/)).toBeInTheDocument();
+});
+
+test("child routes get parent path params", () => {
+  const { Router, navigate } = createRouter({
+    path: "",
+    children: (parent) => [
+      route({
+        path: "parent/$parentPathParam",
+        render({ children, params }) {
+          return (
+            <div>
+              <div>Parent {params.parentPathParam}</div>
+              {children}
+            </div>
+          );
+        },
+        children: (parent) => [
+          route({
+            path: "child/$childPathParam",
+            render({ children, params }) {
+              return (
+                <div>
+                  Child {params.childPathParam} {parent.params.parentPathParam}
+                </div>
+              );
+            },
+            children: (parent) => [],
+          }),
+        ],
+      }),
+    ],
+  });
+  render(<Router />);
+  act(() =>
+    navigate({
+      path: "/parent/$parentPathParam/child/$childPathParam",
+      params: { parentPathParam: "PPP", childPathParam: "CCC" },
+    })
+  );
+  expect(screen.getByText(/Parent/)).toHaveTextContent("Parent PPP");
+  expect(screen.getByText(/Child/)).toHaveTextContent("Child CCC PPP");
 });
