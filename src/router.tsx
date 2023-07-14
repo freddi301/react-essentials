@@ -32,7 +32,7 @@ type RouteDefinition<
     urlSearchParams: URLSearchParams;
   }): Search;
   validate?(_: { params: ParamsFromPath<Path>; search: Search }): boolean;
-  render?(_: {
+  Component?(_: {
     params: ParamsFromPath<Path>;
     search: Search;
     children: React.ReactNode;
@@ -88,7 +88,7 @@ type Router<
     path: P;
     children: React.ReactNode;
     /** oveeride default rendering */
-    render?(_: {
+    Component?(_: {
       path: P;
       params: ParamsFromPath<P>;
       children: React.ReactNode;
@@ -105,7 +105,7 @@ type Router<
     path,
   }: {
     path: P;
-    render?(_: {
+    Component?(_: {
       path: P;
       params: ParamsFromPath<P>;
       children: React.ReactNode;
@@ -161,12 +161,12 @@ export function createRouter<
         isPending,
       };
     },
-    Link({ path, params = {}, search = {}, children, render }) {
+    Link({ path, params = {}, search = {}, children, Component }) {
       const { current } = router.useRouterState();
       const { navigate } = router.useRouter();
       const href = rebuildPath(path, params, search);
-      if (render) {
-        return React.createElement(render, {
+      if (Component) {
+        return React.createElement(Component, {
           path,
           params: params as any,
           children,
@@ -189,13 +189,13 @@ export function createRouter<
         </a>
       );
     },
-    MatchRoute({ path, render, children }) {
+    MatchRoute({ path, Component, children }) {
       const { current } = router.useRouterState();
       // TODO actually use route definitions (aslo to supply search params)
       const match = matchPath(path, current);
       if (!match) return null;
-      if (!render) return children;
-      return React.createElement(render, {
+      if (!Component) return children;
+      return React.createElement(Component, {
         path,
         params: match.params as any,
         children,
@@ -345,8 +345,8 @@ function renderRoute({
       if (children) break;
     }
   }
-  if (!route.render) return children;
-  return React.createElement(route.render, {
+  if (!route.Component) return children;
+  return React.createElement(route.Component, {
     params: match.params,
     children,
     search:

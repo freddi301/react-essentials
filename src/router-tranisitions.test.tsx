@@ -15,7 +15,7 @@ const dataResource = createResource(getData);
 const { Router, Link, useRouterState } = createRouter(
   {
     path: "",
-    render({ children }) {
+    Component({ children }) {
       const { isPending } = useRouterState();
       return (
         <div>
@@ -30,7 +30,7 @@ const { Router, Link, useRouterState } = createRouter(
     children: (parent) => [
       route({
         path: "a",
-        render() {
+        Component() {
           const data = dataResource.useData("A");
           return <h1>A + {data}</h1>;
         },
@@ -38,7 +38,7 @@ const { Router, Link, useRouterState } = createRouter(
       }),
       route({
         path: "b",
-        render() {
+        Component() {
           return <p>b + {dataResource.read("B")}</p>;
         },
         children: (parent) => undefined,
