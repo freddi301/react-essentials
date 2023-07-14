@@ -21,7 +21,7 @@ const { Router, Link, useRouterState } = createRouter(
         <div>
           <nav>
             <Link path="/a">A</Link>,<Link path="/b">B</Link>
-            {isPending && "TRANSITION PENDING"}
+            {isPending && "TRANSITION"}
           </nav>
           {children}
         </div>

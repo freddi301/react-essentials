@@ -12,7 +12,7 @@ function MyForm() {
     if (!fields.isValid) return;
     if (!age.value) return;
     return { name: name.value, age: age.value };
-  }, []);
+  }, [age.value, fields.isValid, name.value]);
   const client = { mutate(data: { name?: string; age: number }): void {} };
   const submitMutation = { pending: [] };
   const canSubmit = Boolean(formData) && submitMutation.pending.length === 0;
