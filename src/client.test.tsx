@@ -5,7 +5,7 @@ import React from "react";
 import { act, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
-import { createMutation, createResource } from "./client";
+import { createMutation, createResource, reuseInstances } from "./client";
 
 function example() {
   type User = {
@@ -206,4 +206,59 @@ test("resources invalidated by a mutation are reloaded", async () => {
   expect(await screen.findByText("Entity: 1")).toBeInTheDocument();
   userEvent.click(screen.getByText("update entity"));
   expect(await screen.findByText("Entity: 2")).toBeInTheDocument();
+});
+
+async function getSuspenseData<Data>(callback: () => Data): Promise<Data> {
+  try {
+    return callback();
+  } catch (error) {
+    return (await error) as Data;
+  }
+}
+
+test("reuse instances", () => {
+  const a = { x: 1, y: 2 };
+  const b = { x: 1, y: 2 };
+  expect(reuseInstances(a, b)).toBe(a);
+  const c = { z: a };
+  const d = { z: b };
+  expect((reuseInstances(c, d) as any).z).toBe(c.z);
+  expect((reuseInstances(c, d) as any).z).not.toBe(d.z);
+  const e = { z: { x: 6, y: 7 } };
+  expect((reuseInstances(c, e) as any).z).not.toStrictEqual(c.z);
+  expect((reuseInstances(c, e) as any).z).toStrictEqual(e.z);
+});
+
+test("structural sharing on read", async () => {
+  async function getData(version: number) {
+    if (version === 1) {
+      return {
+        ok: true,
+        data: [
+          { a: 1, b: 2 },
+          { c: 3, d: 4 },
+        ],
+      };
+    }
+    return {
+      ok: false,
+      data: [
+        { a: 1, b: 2 },
+        { g: 30, h: 40 },
+      ],
+    };
+  }
+  const resource = createResource(getData);
+  const first = await getSuspenseData(() => resource.read(1));
+  expect(first).toStrictEqual(await getData(1));
+  resource.invalidateAll();
+  const second = await getSuspenseData(() => resource.read(1));
+  expect(first).toStrictEqual(await getData(1));
+  expect(second).toBe(first);
+  const third = await getSuspenseData(() => resource.read(2));
+  expect(third).toStrictEqual(await getData(2));
+  expect(third).not.toStrictEqual(first);
+  expect(third).not.toBe(first);
+  expect(third).not.toStrictEqual(second);
+  expect(third).not.toBe(second);
 });

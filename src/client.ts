@@ -1,6 +1,5 @@
 import React from "react";
 
-// TODO structural sharing
 // TODO let user track mutations more easily (just returning mutation promise now)
 
 type Resource<Variables, Data> = {
@@ -77,7 +76,14 @@ export function createResource<Variables, Data>(
     const revalidateAfterTimeoutId = window.setTimeout(() => {
       resource.invalidateExact(variables);
     }, revalidateAfter);
-    cache.set(variables, { isValid: true, data, revalidateAfterTimeoutId });
+    cache.set(variables, {
+      isValid: true,
+      data:
+        found && "data" in found.entry
+          ? (reuseInstances(found.entry.data, data) as Data)
+          : data,
+      revalidateAfterTimeoutId,
+    });
     subscriptions.forEach((subscription) => {
       if (deepIsEqual(subscription.variables, variables)) {
         subscription.listener();
@@ -143,7 +149,11 @@ export function createResource<Variables, Data>(
           forceUpdate((count) => count + 1)
         );
       }, [variables, revalidateOnMount]);
-      return resource.read(variables);
+      const previous = React.useRef<Data>();
+      const data = resource.read(variables);
+      const reused = reuseInstances(previous.current, data) as Data;
+      previous.current = data;
+      return reused;
     },
   };
   if (revalidateOnFocus) {
@@ -233,4 +243,52 @@ function partialDeepEqual(a: unknown, b: unknown) {
     return true;
   }
   return false;
+}
+
+export function reuseInstances(cached: unknown, incoming: unknown) {
+  if (incoming === cached) return cached;
+  if (incoming instanceof Array && cached instanceof Array) {
+    let everythingIsEqual = incoming.length === cached.length;
+    const reconstructed: Array<unknown> = [];
+    for (let i = 0; i < incoming.length; i++) {
+      const chosen = reuseInstances(cached[i], incoming[i]);
+      if (chosen === cached[i]) {
+        reconstructed[i] = cached[i];
+      } else {
+        everythingIsEqual = false;
+        reconstructed[i] = chosen;
+      }
+    }
+    if (everythingIsEqual) return cached;
+    return reconstructed;
+  }
+  if (
+    typeof incoming === "object" &&
+    incoming !== null &&
+    typeof cached === "object" &&
+    cached !== null
+  ) {
+    let everythingIsEqual = true;
+    const reconstructed: Record<string, unknown> = {};
+    for (const [key] of Object.keys(incoming)) {
+      const chosen = reuseInstances(
+        (cached as any)[key],
+        (incoming as any)[key]
+      );
+      if (chosen === (cached as any)[key]) {
+        reconstructed[key] = (cached as any)[key];
+      } else {
+        everythingIsEqual = false;
+        reconstructed[key] = chosen;
+      }
+    }
+    for (const [key] of Object.entries(cached)) {
+      if (!(key in reconstructed)) {
+        everythingIsEqual = false;
+      }
+    }
+    if (everythingIsEqual) return cached;
+    return reconstructed;
+  }
+  return incoming;
 }
