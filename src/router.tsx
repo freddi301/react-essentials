@@ -1,4 +1,5 @@
-import React, { startTransition } from "react";
+import React from "react";
+import ReactDOM from "react-dom";
 
 type ParamsFromPathRecursive<
   Params,
@@ -24,6 +25,7 @@ type RouteDefinition<
   Search extends Record<string, any>,
   Children extends Array<RouteDefinition<any, any, any>> | undefined
 > = {
+  /** @important `"my/route/$param" as const` form must be used until typescript 5.x is supported in create-react-app */
   path: Path;
   search?(_: {
     params: ParamsFromPath<Path>;
@@ -40,7 +42,7 @@ type RouteDefinition<
 };
 
 export function route<
-  const Path extends string,
+  Path extends string, // TODO: this should be "const Path extends string", wait for broader support for typescript 5.x
   Search extends Record<string, any>,
   Children extends Array<RouteDefinition<any, any, any>> | undefined
 >(
@@ -114,26 +116,32 @@ type Router<
 };
 
 export function createRouter<
-  const Path extends string,
+  Path extends string, // TODO: this should be "const Path extends string", wait for broader support for typescript 5.x
   Search extends Record<string, any>,
   Children extends Array<RouteDefinition<any, any, any>> | undefined
 >(
   root: RouteDefinition<Path, Search, Children>,
   {
     reactTransitionOnNavigate = true,
-    documentViewTransitionOnNavigate = true,
+    documentViewTransitionOnNavigate = false,
   }: {
     reactTransitionOnNavigate?: boolean;
     documentViewTransitionOnNavigate?: boolean;
   } = {}
 ): Router<Path, Search, Children> {
+  if (reactTransitionOnNavigate && documentViewTransitionOnNavigate) {
+    console.warn(
+      "Both reactTransitionOnNavigate and documentViewTransitionOnNavigate are enabled. It works as expected but it renders the app TWICE!"
+    );
+  }
+  documentViewTransitionOnNavigate =
+    documentViewTransitionOnNavigate && Boolean(document.startViewTransition);
   const RouterChangingContext = React.createContext<{
     current: string;
     isPending: boolean;
   }>(null as any);
   const RouterStaticContext = React.createContext<{
     setCurrent(path: string): void;
-    startTransition(callback: () => void): void;
   }>(null as any);
   const router: Router<Path, Search, Children> = {
     /** this hook never triggers rerender */
@@ -141,31 +149,7 @@ export function createRouter<
       const { setCurrent } = React.useContext(RouterStaticContext);
       return {
         navigate: React.useCallback(({ path, params = {}, search = {} }) => {
-          const doIt = () => setCurrent(rebuildPath(path, params, search));
-          if (
-            reactTransitionOnNavigate &&
-            documentViewTransitionOnNavigate &&
-            document.startViewTransition
-          ) {
-            startTransition(() => {
-              document.startViewTransition!(() => {
-                doIt();
-              });
-            });
-          } else if (reactTransitionOnNavigate) {
-            startTransition(() => {
-              doIt();
-            });
-          } else if (
-            documentViewTransitionOnNavigate &&
-            document.startViewTransition
-          ) {
-            document.startViewTransition!(() => {
-              doIt();
-            });
-          } else {
-            doIt();
-          }
+          setCurrent(rebuildPath(path, params, search));
         }, []),
       };
     },
@@ -220,11 +204,26 @@ export function createRouter<
     Router() {
       const [current, setCurrent] = React.useState<string>("");
       const [isPending, startTransition] = React.useTransition();
-      const [path, search = ""] = current.split("?");
       const staticContext = React.useMemo(() => {
         return {
-          setCurrent,
-          startTransition,
+          setCurrent(path: string) {
+            if (reactTransitionOnNavigate) {
+              startTransition(() => {
+                setCurrent(path);
+              });
+            } else if (
+              !reactTransitionOnNavigate &&
+              documentViewTransitionOnNavigate
+            ) {
+              document.startViewTransition!(() => {
+                ReactDOM.flushSync(() => {
+                  setCurrent(path);
+                });
+              });
+            } else {
+              setCurrent(path);
+            }
+          },
         };
       }, []);
       const changingContext = React.useMemo(() => {
@@ -233,15 +232,37 @@ export function createRouter<
           isPending,
         };
       }, [current, isPending]);
+      const rendered = React.useMemo(() => {
+        const [path, search = ""] = current.split("?");
+        return renderRoute({
+          route: root,
+          path,
+          urlSearchParams: new URLSearchParams(search),
+        });
+      }, [current]);
+      const [display, setDisplay] = React.useState<React.ReactNode>(null);
+      React.useLayoutEffect(() => {
+        if (reactTransitionOnNavigate && documentViewTransitionOnNavigate) {
+          document.startViewTransition!(() => {
+            ReactDOM.flushSync(() => {
+              setDisplay(rendered);
+            });
+          });
+        }
+      }, [rendered]);
+      const parallel = React.useMemo(() => document.createElement("div"), []);
       return (
         <RouterStaticContext.Provider value={staticContext}>
           <RouterChangingContext.Provider value={changingContext}>
-            {renderRoute({
-              route: root,
-              path,
-              urlSearchParams: new URLSearchParams(search),
-            })}
-          </RouterChangingContext.Provider>{" "}
+            {reactTransitionOnNavigate && documentViewTransitionOnNavigate ? (
+              <React.Fragment>
+                {ReactDOM.createPortal(rendered, parallel)}
+                {display}
+              </React.Fragment>
+            ) : (
+              rendered
+            )}
+          </RouterChangingContext.Provider>
         </RouterStaticContext.Provider>
       );
     },

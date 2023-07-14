@@ -46,10 +46,10 @@ test("router typing", () => {
   // );
 
   const { Router, useRouter, Link } = createRouter({
-    path: "company/$companyId",
+    path: "company/$companyId" as const,
     children: (parent) => [
       route({
-        path: "user/$userId",
+        path: "user/$userId" as const,
         render({ params: { userId } }) {
           return (
             <div>
@@ -60,11 +60,11 @@ test("router typing", () => {
         children: (parent) => undefined,
       }),
       route({
-        path: "user/$userId/post",
+        path: "user/$userId/post" as const,
         children: (parent) => undefined,
       }),
       route({
-        path: "user/$userId/post/$postId",
+        path: "user/$userId/post/$postId" as const,
         render({ children, params: { userId, postId } }) {
           return (
             <div>
@@ -76,11 +76,11 @@ test("router typing", () => {
         },
         children: (parent) => [
           route({
-            path: "comments",
+            path: "comments" as const,
             children: (parent) => undefined,
           }),
           route({
-            path: "comments/$commentId",
+            path: "comments/$commentId" as const,
             search({ params, urlSearchParams }) {
               return { search: urlSearchParams.get("search") ?? undefined };
             },
@@ -180,7 +180,7 @@ test("router typing", () => {
 
 test("router renders root route", () => {
   const { Router } = createRouter({
-    path: "",
+    path: "" as const,
     render({}) {
       return <div>Heading</div>;
     },
@@ -192,7 +192,7 @@ test("router renders root route", () => {
 
 test("router switches between two routes", async () => {
   const { Router, Link } = createRouter({
-    path: "",
+    path: "" as const,
     render({ children }) {
       return (
         <div>
@@ -207,14 +207,14 @@ test("router switches between two routes", async () => {
     },
     children: (parent) => [
       route({
-        path: "a",
+        path: "a" as const,
         render({ children }) {
           return <div>RouteA</div>;
         },
         children: (parent) => undefined,
       }),
       route({
-        path: "b",
+        path: "b" as const,
         render({ children }) {
           return <div>RouteB</div>;
         },
@@ -236,7 +236,7 @@ test("router switches between two routes", async () => {
 
 test("navigation works with clicks", async () => {
   const { Router, useRouter } = createRouter({
-    path: "",
+    path: "" as const,
     render({ children }) {
       const { navigate } = useRouter();
       return (
@@ -263,14 +263,14 @@ test("navigation works with clicks", async () => {
     },
     children: (parent) => [
       route({
-        path: "a",
+        path: "a" as const,
         render({ children }) {
           return <div>RouteA</div>;
         },
         children: (parent) => undefined,
       }),
       route({
-        path: "b",
+        path: "b" as const,
         render({ children }) {
           return <div>RouteB</div>;
         },
@@ -289,7 +289,7 @@ test("navigation works with clicks", async () => {
 
 test("navigation works with links", async () => {
   const { Router, Link } = createRouter({
-    path: "",
+    path: "" as const,
     render({ children }) {
       return (
         <>
@@ -305,14 +305,14 @@ test("navigation works with links", async () => {
     },
     children: (parent) => [
       route({
-        path: "a",
+        path: "a" as const,
         render({ children }) {
           return <div>RouteA</div>;
         },
         children: (parent) => undefined,
       }),
       route({
-        path: "b",
+        path: "b" as const,
         render({ children }) {
           return <div>RouteB</div>;
         },
@@ -331,7 +331,7 @@ test("navigation works with links", async () => {
 
 test("more specific routes take precedence", async () => {
   const { Router, Link } = createRouter({
-    path: "",
+    path: "" as const,
     render({ children }) {
       return (
         <div>
@@ -345,14 +345,14 @@ test("more specific routes take precedence", async () => {
     },
     children: (parent) => [
       route({
-        path: "a",
+        path: "a" as const,
         render({ children }) {
           return <div>RouteA</div>;
         },
         children: (parent) => undefined,
       }),
       route({
-        path: "a/b",
+        path: "a/b" as const,
         render({ children }) {
           return <div>RouteSpecific</div>;
         },
@@ -371,7 +371,7 @@ test("more specific routes take precedence", async () => {
 
 test("render method gets path params", async () => {
   const { Router, Link } = createRouter({
-    path: "",
+    path: "" as const,
     render({ children }) {
       return (
         <div>
@@ -384,7 +384,7 @@ test("render method gets path params", async () => {
     },
     children: (parent) => [
       route({
-        path: "a/$id",
+        path: "a/$id" as const,
         render({ params }) {
           return <div>RouteA {params.id}</div>;
         },
@@ -401,7 +401,7 @@ test("render method gets path params", async () => {
 
 test("render method gets search params", async () => {
   const { Router, Link } = createRouter({
-    path: "",
+    path: "" as const,
     render({ children }) {
       return (
         <div>
@@ -418,7 +418,7 @@ test("render method gets search params", async () => {
     },
     children: (parent) => [
       route({
-        path: "a/$id",
+        path: "a/$id" as const,
         search({ params, urlSearchParams }) {
           return {
             id: (urlSearchParams.get("searchParam") ?? "") + params.id,
@@ -438,7 +438,7 @@ test("render method gets search params", async () => {
 
 test("child routes get parent path params", async () => {
   const { Router, Link } = createRouter({
-    path: "",
+    path: "" as const,
     render({ children }) {
       return (
         <div>
@@ -456,7 +456,7 @@ test("child routes get parent path params", async () => {
     },
     children: (parent) => [
       route({
-        path: "parent/$parentPathParam",
+        path: "parent/$parentPathParam" as const,
         render({ children, params }) {
           return (
             <div>
@@ -467,7 +467,7 @@ test("child routes get parent path params", async () => {
         },
         children: (parent) => [
           route({
-            path: "child/$childPathParam",
+            path: "child/$childPathParam" as const,
             render({ children, params }) {
               return (
                 <div>
@@ -489,7 +489,7 @@ test("child routes get parent path params", async () => {
 
 test("active links", async () => {
   const { Router, Link } = createRouter({
-    path: "",
+    path: "" as const,
     render({ children }) {
       return (
         <div>
@@ -507,11 +507,11 @@ test("active links", async () => {
     },
     children: (parent) => [
       route({
-        path: "a",
+        path: "a" as const,
         children: (parent) => undefined,
       }),
       route({
-        path: "b",
+        path: "b" as const,
         children: (parent) => undefined,
       }),
     ],
