@@ -1,100 +1,166 @@
 import React from "react";
 
-type QueryDefinition<Variables, Data> = {
-  resolve(variables: Variables): Promise<Data>;
+// TODO apply @tanstack/react-query cache invalidation (see page docs)
+// TODO retry queries on error (see @tanstack/react-query)
+// TODO let user track mutations
+
+type Resource<Variables, Data> = {
+  read(variables: Variables): Data;
+  invalidate(criteria: (variables: Variables) => boolean): void;
+  invalidateAll(): void;
+  invalidateExact(variables: Variables): void;
+  invalidatePartial(variables: RecursivelyPartial<Variables>): void;
+  subscribe(variables: Variables, listener: Listener): Unsubscribe;
+  useData(variables: Variables): Data;
 };
 
-type MutationDefinition<Variables, Data> = {
-  perform(variables: Variables): Promise<Data>;
-  onSuccess?(args: { variables: Variables; data: Data }): Promise<void>;
-  onError?(args: { variables: Variables; error: unknown }): Promise<void>;
-};
+type Listener = () => void;
+type Unsubscribe = () => void;
 
-type RecursiveOptional<T> = {
-  [K in keyof T]?: T[K] extends Array<any>
-    ? RecursiveOptional<T[K]>
-    : T[K] extends Record<string, any>
-    ? RecursiveOptional<T[K]>
-    : T[K];
-};
-
-type Client<
-  Queries extends Record<string, QueryDefinition<any, any>>,
-  Mutations extends Record<string, MutationDefinition<any, any>>
-> = {
-  queries: Queries;
-  invalidate<Q extends keyof Queries>(
-    cacheKey: RecursiveOptional<[Q, ...Parameters<Queries[Q]["resolve"]>]>
-  ): void;
-  mutations: Mutations;
-  mutate<M extends keyof Mutations>({}: {
-    variables: [M, ...Parameters<Mutations[M]["perform"]>];
-  }): void;
-};
-
-type QueriesOf<C extends Client<any, any>> = C extends Client<
-  infer Queries,
-  any
->
-  ? Queries
-  : never;
-
-type MutationsOf<C extends Client<any, any>> = C extends Client<
-  any,
-  infer Mutations
->
-  ? Mutations
-  : never;
-
-export function createClient<
-  Queries extends Record<string, QueryDefinition<any, any>>,
-  Mutations extends Record<string, MutationDefinition<any, any>>
->({}: { queries: Queries; mutations: Mutations }): Client<Queries, Mutations> {
-  // TODO implement caching store here
-  return null as any;
-}
-
-type Query<Variables, Data> = {
-  current: QueryStatus<Variables, Data>;
-  previous?: QueryStatus<Variables, Data>;
-};
-
-type QueryStatus<Variables, Data> = {
-  variables: Variables;
-} & ({ isLoading: true; data: undefined } | { isLoading: false; data: Data });
-
-export function useQuery<
-  C extends Client<any, any>,
-  Q extends keyof QueriesOf<C>
->({}: {
-  client: C;
-  variables: [Q, ...Parameters<QueriesOf<C>[Q]["resolve"]>];
-}): Query<
-  [Q, ...Parameters<QueriesOf<C>[Q]["resolve"]>],
-  Awaited<ReturnType<QueriesOf<C>[Q]["resolve"]>>
-> {
-  // TODO implement subscription to client
-  return null as any;
+export function createResource<Variables, Data>(
+  resolver: (variables: Variables) => Promise<Data>
+): Resource<Variables, Data> {
+  type Entry = { data: Data } | { promise: Promise<Data> };
+  const cache = new Map<Variables, Entry>();
+  const findEntry = (
+    variables: Variables
+  ): { variables: Variables; entry: Entry } | undefined => {
+    for (const [entryVariables, entry] of cache.entries()) {
+      if (deepIsEqual(entryVariables, variables)) {
+        return { variables: entryVariables, entry };
+      }
+    }
+  };
+  const subscriptions = new Set<{ variables: Variables; listener: Listener }>();
+  return {
+    read(variables) {
+      const found = findEntry(variables);
+      if (!found) {
+        const promise = resolver(variables);
+        cache.set(variables, { promise });
+        promise.then((data) => {
+          cache.set(variables, { data });
+        });
+        throw promise;
+      } else {
+        if ("data" in found.entry) return found.entry.data;
+        else throw found.entry.promise;
+      }
+    },
+    invalidate(criteria) {
+      for (const variables of cache.keys()) {
+        if (criteria(variables)) {
+          cache.delete(variables);
+          subscriptions.forEach((subscription) => {
+            if (deepIsEqual(subscription.variables, variables)) {
+              subscription.listener();
+            }
+          });
+        }
+      }
+    },
+    invalidateAll() {
+      this.invalidate(() => true);
+    },
+    invalidateExact(variables) {
+      this.invalidate((other) => deepIsEqual(variables, other));
+    },
+    invalidatePartial(variables) {
+      this.invalidate((other) => partialDeepEqual(variables, other));
+    },
+    subscribe(variables, listener) {
+      const subscription = { variables, listener };
+      subscriptions.add(subscription);
+      return () => subscriptions.delete(subscription);
+    },
+    useData(variables) {
+      const [, forceUpdate] = React.useState(0);
+      React.useEffect(
+        () =>
+          this.subscribe(variables, () => forceUpdate((count) => count + 1)),
+        [variables]
+      );
+      return this.read(variables);
+    },
+  };
 }
 
 type Mutation<Variables, Data> = {
-  pending: Array<MutationStatus<Variables, Data>>;
+  mutate(variables: Variables): void;
 };
 
-type MutationStatus<Variables, Data> = {
-  variables: Variables;
-} & ({ isLoading: true; data: undefined } | { isLoading: false; data: Data });
+export function createMutation<Variables, Data>(
+  performer: (variables: Variables) => Promise<Data>,
+  {
+    onSuccess,
+    onError,
+  }: {
+    onSuccess?(_: { variables: Variables; data: Data }): void;
+    onError?(_: { variables: Variables; error: unknown }): void;
+  }
+): Mutation<Variables, Data> {
+  return {
+    mutate(variables) {
+      performer(variables).then(
+        (data) => {
+          onSuccess?.({ variables, data });
+        },
+        (error) => {
+          onError?.({ variables, error });
+        }
+      );
+    },
+  };
+}
 
-export function useMutation<
-  C extends Client<any, any>,
-  M extends keyof MutationsOf<C>
->({}: {
-  client: C;
-  variables: [M, ...Parameters<MutationsOf<C>[M]["perform"]>] | undefined;
-}): Mutation<
-  [M, ...Parameters<MutationsOf<C>[M]["perform"]>],
-  Awaited<ReturnType<MutationsOf<C>[M]["perform"]>>
-> {
-  // TODO implement subscription to client
-  return null as any;
+function deepIsEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== typeof b) return false;
+  if (a instanceof Array && b instanceof Array) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!deepIsEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  if (
+    typeof a === "object" &&
+    a !== null &&
+    typeof b === "object" &&
+    b !== null
+  ) {
+    const allKeys = new Set<string>();
+    for (const [key] of Object.entries(a)) allKeys.add(key);
+    for (const [key] of Object.entries(b)) allKeys.add(key);
+    for (const key of allKeys) {
+      if (!deepIsEqual((a as any)[key], (b as any)[key])) return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+type RecursivelyPartial<T> = { [K in keyof T]?: RecursivelyPartial<T[K]> };
+
+function partialDeepEqual(a: unknown, b: unknown) {
+  if (a === b) return true;
+  if (typeof a !== typeof b) return false;
+  if (a instanceof Array && b instanceof Array) {
+    for (let i = 0; i < a.length; i++) {
+      if (!partialDeepEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  if (
+    typeof a === "object" &&
+    a !== null &&
+    typeof b === "object" &&
+    b !== null
+  ) {
+    for (const [key] of Object.entries(a)) {
+      if (!partialDeepEqual((a as any)[key], (b as any)[key])) return false;
+    }
+    return true;
+  }
+  return false;
 }
