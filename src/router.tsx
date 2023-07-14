@@ -1,4 +1,4 @@
-import React from "react";
+import React, { startTransition } from "react";
 
 type ParamsFromPathRecursive<
   Params,
@@ -65,14 +65,16 @@ export function createRouter<
 >(
   root: RouteDefinition<Path, Search, Children>
 ): {
-  navigate<P extends PathsOf<RouteDefinition<Path, Search, Children>>>({
-    path,
-  }: {
-    path: P;
-    search?: any; // TODO
-  } & (ParamsFromPathRecursive<"", P> extends ""
-    ? { params?: ParamsFromPath<P> }
-    : { params: ParamsFromPath<P> })): void;
+  useRouter(): {
+    navigate<P extends PathsOf<RouteDefinition<Path, Search, Children>>>({
+      path,
+    }: {
+      path: P;
+      search?: any; // TODO
+    } & (ParamsFromPathRecursive<"", P> extends ""
+      ? { params?: ParamsFromPath<P> }
+      : { params: ParamsFromPath<P> })): void;
+  };
   Link<P extends PathsOf<RouteDefinition<Path, Search, Children>>>({
     path,
     params,
@@ -86,31 +88,34 @@ export function createRouter<
     : { params: ParamsFromPath<P> })): React.ReactElement;
   Router: React.ComponentType<{}>;
 } {
-  let current: { path?: string } = {};
-  const listeners = new Set<() => void>();
-  const subscribe = (listener: () => void) => {
-    listeners.add(listener);
-    return () => {
-      listeners.delete(listener);
-    };
-  };
-  const getSnapshot = () => {
-    return current.path;
-  };
+  const RouterContext = React.createContext<{
+    current: string;
+    setCurrent(path: string): void;
+    isPending: boolean;
+    startTransition(callback: () => void): void;
+  }>(null as any);
   return {
-    navigate({ path, params = {}, search = {} }) {
-      current.path = rebuildPath(path, params, search);
-      listeners.forEach((listener) => listener());
+    useRouter() {
+      const { setCurrent } = React.useContext(RouterContext);
+      return {
+        navigate: React.useCallback(({ path, params = {}, search = {} }) => {
+          startTransition(() => {
+            setCurrent(rebuildPath(path, params, search));
+          });
+        }, []),
+      };
     },
     Link({ path, params = {}, search = {}, children }) {
+      const { setCurrent } = React.useContext(RouterContext);
       const href = rebuildPath(path, params, search);
       return (
         <a
           href={href}
           onClick={(event) => {
             event.preventDefault();
-            current.path = href;
-            listeners.forEach((listener) => listener());
+            startTransition(() => {
+              setCurrent(href);
+            });
           }}
         >
           {children}
@@ -118,14 +123,26 @@ export function createRouter<
       );
     },
     Router() {
-      const current = React.useSyncExternalStore(subscribe, getSnapshot);
-      if (current === undefined) return null;
+      const [current, setCurrent] = React.useState<string>("");
+      const [isPending, startTransition] = React.useTransition();
       const [path, search = ""] = current.split("?");
-      return renderRoute(
-        root,
-        path,
-        new URLSearchParams(search)
-      ) as JSX.Element;
+      const contextValue = React.useMemo(() => {
+        return {
+          current,
+          setCurrent,
+          isPending,
+          startTransition,
+        };
+      }, []);
+      return (
+        <RouterContext.Provider value={contextValue}>
+          {renderRoute({
+            route: root,
+            path,
+            urlSearchParams: new URLSearchParams(search),
+          })}
+        </RouterContext.Provider>
+      );
     },
   };
 }
@@ -170,11 +187,15 @@ function rebuildPath(
   return path;
 }
 
-function renderRoute(
-  route: RouteDefinition<any, any, any>,
-  path: string,
-  urlSearchParams: URLSearchParams
-): React.ReactNode {
+function renderRoute({
+  route,
+  path,
+  urlSearchParams,
+}: {
+  route: RouteDefinition<any, any, any>;
+  path: string;
+  urlSearchParams: URLSearchParams;
+}): React.ReactNode {
   const match = matchPath(route.path, path);
   if (!match) return null;
   let children = null;
@@ -192,12 +213,16 @@ function renderRoute(
     );
   if (mostSpecific) {
     for (const child of mostSpecific) {
-      children = renderRoute(child, match.remainingPath, urlSearchParams);
+      children = renderRoute({
+        route: child,
+        path: match.remainingPath,
+        urlSearchParams,
+      });
       if (children) break;
     }
   }
   if (!route.render) return children;
-  return route.render({
+  return React.createElement(route.render, {
     params: match.params,
     children,
     search:
