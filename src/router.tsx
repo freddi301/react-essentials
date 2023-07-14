@@ -99,6 +99,17 @@ type Router<
   } & (ParamsFromPathRecursive<"", P> extends ""
     ? { params?: ParamsFromPath<P> }
     : { params: ParamsFromPath<P> })): React.ReactElement;
+  MatchRoute<P extends PathsOf<RouteDefinition<Path, Search, Children>>>({
+    path,
+  }: {
+    path: P;
+    render?(_: {
+      path: P;
+      params: ParamsFromPath<P>;
+      children: React.ReactNode;
+    }): React.ReactNode;
+    children?: React.ReactNode;
+  }): React.ReactNode;
   Router: React.ComponentType<{}>;
 };
 
@@ -164,6 +175,18 @@ export function createRouter<
           {children}
         </a>
       );
+    },
+    MatchRoute({ path, render, children }) {
+      const { current } = router.useRouterState();
+      // TODO actually use route definitions (aslo to supply search params)
+      const match = matchPath(path, current);
+      if (!match) return null;
+      if (!render) return children;
+      return React.createElement(render, {
+        path,
+        params: match.params as any,
+        children,
+      });
     },
     Router() {
       const [current, setCurrent] = React.useState<string>("");
