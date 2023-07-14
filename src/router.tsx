@@ -58,13 +58,11 @@ type PathsOf<Route> = Route extends RouteDefinition<
   ? Path | `${Path}/${PathsOf<Children[keyof Children]>}`
   : never;
 
-export function createRouter<
-  const Path extends string,
+type Router<
+  Path extends string,
   Search extends Record<string, any>,
   Children extends Array<RouteDefinition<any, any, any>> | undefined
->(
-  root: RouteDefinition<Path, Search, Children>
-): {
+> = {
   useRouter(): {
     navigate<P extends PathsOf<RouteDefinition<Path, Search, Children>>>({
       path,
@@ -75,6 +73,11 @@ export function createRouter<
       ? { params?: ParamsFromPath<P> }
       : { params: ParamsFromPath<P> })): void;
   };
+  useRouterState(): {
+    current: string;
+    isPending: boolean;
+  };
+  /** By default wraps children in <a href=""/> */
   Link<P extends PathsOf<RouteDefinition<Path, Search, Children>>>({
     path,
     params,
@@ -82,21 +85,42 @@ export function createRouter<
   }: {
     path: P;
     children: React.ReactNode;
+    /** oveeride default rendering */
+    render?(_: {
+      path: P;
+      params: ParamsFromPath<P>;
+      children: React.ReactNode;
+      /** true is current route matches */
+      isActive: boolean;
+      href: string;
+      navigate(): void;
+    }): React.ReactNode;
     search?: any; // TODO
   } & (ParamsFromPathRecursive<"", P> extends ""
     ? { params?: ParamsFromPath<P> }
     : { params: ParamsFromPath<P> })): React.ReactElement;
   Router: React.ComponentType<{}>;
-} {
-  const RouterContext = React.createContext<{
+};
+
+export function createRouter<
+  const Path extends string,
+  Search extends Record<string, any>,
+  Children extends Array<RouteDefinition<any, any, any>> | undefined
+>(
+  root: RouteDefinition<Path, Search, Children>
+): Router<Path, Search, Children> {
+  const RouterChangingContext = React.createContext<{
     current: string;
-    setCurrent(path: string): void;
     isPending: boolean;
+  }>(null as any);
+  const RouterStaticContext = React.createContext<{
+    setCurrent(path: string): void;
     startTransition(callback: () => void): void;
   }>(null as any);
-  return {
+  const router: Router<Path, Search, Children> = {
+    /** this hook never triggers rerender */
     useRouter() {
-      const { setCurrent } = React.useContext(RouterContext);
+      const { setCurrent } = React.useContext(RouterStaticContext);
       return {
         navigate: React.useCallback(({ path, params = {}, search = {} }) => {
           startTransition(() => {
@@ -105,17 +129,36 @@ export function createRouter<
         }, []),
       };
     },
-    Link({ path, params = {}, search = {}, children }) {
-      const { setCurrent } = React.useContext(RouterContext);
+    /** this hook trigger rerender when route updates */
+    useRouterState() {
+      const { current, isPending } = React.useContext(RouterChangingContext);
+      return {
+        current,
+        isPending,
+      };
+    },
+    Link({ path, params = {}, search = {}, children, render }) {
+      const { current } = router.useRouterState();
+      const { navigate } = router.useRouter();
       const href = rebuildPath(path, params, search);
+      if (render) {
+        return React.createElement(render, {
+          path,
+          params: params as any,
+          children,
+          isActive: href === current,
+          href,
+          navigate() {
+            navigate({ path, params, search } as any);
+          },
+        });
+      }
       return (
         <a
           href={href}
           onClick={(event) => {
             event.preventDefault();
-            startTransition(() => {
-              setCurrent(href);
-            });
+            navigate({ path, params, search } as any);
           }}
         >
           {children}
@@ -126,25 +169,32 @@ export function createRouter<
       const [current, setCurrent] = React.useState<string>("");
       const [isPending, startTransition] = React.useTransition();
       const [path, search = ""] = current.split("?");
-      const contextValue = React.useMemo(() => {
+      const staticContext = React.useMemo(() => {
         return {
-          current,
           setCurrent,
-          isPending,
           startTransition,
         };
       }, []);
+      const changingContext = React.useMemo(() => {
+        return {
+          current,
+          isPending,
+        };
+      }, [current, isPending]);
       return (
-        <RouterContext.Provider value={contextValue}>
-          {renderRoute({
-            route: root,
-            path,
-            urlSearchParams: new URLSearchParams(search),
-          })}
-        </RouterContext.Provider>
+        <RouterStaticContext.Provider value={staticContext}>
+          <RouterChangingContext.Provider value={changingContext}>
+            {renderRoute({
+              route: root,
+              path,
+              urlSearchParams: new URLSearchParams(search),
+            })}
+          </RouterChangingContext.Provider>{" "}
+        </RouterStaticContext.Provider>
       );
     },
   };
+  return router;
 }
 
 function matchPath(pathDefinition: string, path: string) {
@@ -187,6 +237,7 @@ function rebuildPath(
   return path;
 }
 
+// TODO prevent unnecessary rerenders
 function renderRoute({
   route,
   path,

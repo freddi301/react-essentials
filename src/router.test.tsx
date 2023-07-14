@@ -486,3 +486,58 @@ test("child routes get parent path params", async () => {
   expect(await screen.findByText(/Parent/)).toHaveTextContent("Parent PPP");
   expect(screen.getByText(/Child/)).toHaveTextContent("Child CCC PPP");
 });
+
+test("active links", async () => {
+  const { Router, Link } = createRouter({
+    path: "",
+    render({ children }) {
+      return (
+        <div>
+          <nav>
+            <Link path="/a" render={ActiveLinkSpan}>
+              LinkA
+            </Link>
+            <Link path="/b" render={ActiveLinkSpan}>
+              LinkB
+            </Link>
+          </nav>
+          {children}
+        </div>
+      );
+    },
+    children: (parent) => [
+      route({
+        path: "a",
+        children: (parent) => undefined,
+      }),
+      route({
+        path: "b",
+        children: (parent) => undefined,
+      }),
+    ],
+  });
+  function ActiveLinkSpan({
+    isActive,
+    navigate,
+    children,
+  }: {
+    isActive: boolean;
+    navigate(): void;
+    children: React.ReactNode;
+  }) {
+    return (
+      <span onClick={navigate}>
+        {children} {isActive ? "Active" : "Inactive"}
+      </span>
+    );
+  }
+  render(<Router />);
+  expect(screen.getByText(/LinkA/)).toHaveTextContent("LinkA Inactive");
+  expect(screen.getByText(/LinkB/)).toHaveTextContent("LinkB Inactive");
+  userEvent.click(screen.getByText(/LinkA/));
+  expect(await screen.findByText(/LinkA Active/)).toBeInTheDocument();
+  expect(screen.getByText(/LinkB/)).toHaveTextContent("LinkB Inactive");
+  userEvent.click(screen.getByText(/LinkB/));
+  expect(await screen.findByText(/LinkB Active/)).toBeInTheDocument();
+  expect(screen.getByText(/LinkA/)).toHaveTextContent("LinkA Inactive");
+});
