@@ -118,7 +118,14 @@ export function createRouter<
   Search extends Record<string, any>,
   Children extends Array<RouteDefinition<any, any, any>> | undefined
 >(
-  root: RouteDefinition<Path, Search, Children>
+  root: RouteDefinition<Path, Search, Children>,
+  {
+    reactTransitionOnNavigate = true,
+    documentViewTransitionOnNavigate = true,
+  }: {
+    reactTransitionOnNavigate?: boolean;
+    documentViewTransitionOnNavigate?: boolean;
+  } = {}
 ): Router<Path, Search, Children> {
   const RouterChangingContext = React.createContext<{
     current: string;
@@ -134,9 +141,31 @@ export function createRouter<
       const { setCurrent } = React.useContext(RouterStaticContext);
       return {
         navigate: React.useCallback(({ path, params = {}, search = {} }) => {
-          startTransition(() => {
-            setCurrent(rebuildPath(path, params, search));
-          });
+          const doIt = () => setCurrent(rebuildPath(path, params, search));
+          if (
+            reactTransitionOnNavigate &&
+            documentViewTransitionOnNavigate &&
+            document.startViewTransition
+          ) {
+            startTransition(() => {
+              document.startViewTransition!(() => {
+                doIt();
+              });
+            });
+          } else if (reactTransitionOnNavigate) {
+            startTransition(() => {
+              doIt();
+            });
+          } else if (
+            documentViewTransitionOnNavigate &&
+            document.startViewTransition
+          ) {
+            document.startViewTransition!(() => {
+              doIt();
+            });
+          } else {
+            doIt();
+          }
         }, []),
       };
     },
@@ -305,4 +334,10 @@ function renderRoute({
         urlSearchParams,
       }) ?? {},
   });
+}
+
+declare global {
+  interface Document {
+    startViewTransition?(callback: () => void): void;
+  }
 }
