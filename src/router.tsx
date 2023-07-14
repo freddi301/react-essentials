@@ -35,6 +35,7 @@ type RouteDefinition<
     search: Search;
     children: React.ReactNode;
   }): React.ReactNode;
+  /** this can't be optional due to typescript limitations */
   children(parent: { path: Path; params: ParamsFromPath<Path> }): Children;
 };
 
@@ -177,19 +178,19 @@ function renderRoute(
   const match = matchPath(route.path, path);
   if (!match) return null;
   let children = null;
-  if (route.children) {
-    const mostSpecific = route
-      .children({ path: route.path, params: match.params })
-      .sort(
-        (
-          a: RouteDefinition<any, any, any>,
-          b: RouteDefinition<any, any, any>
-        ) => {
-          const aParts = a.path.split("/");
-          const bParts = b.path.split("/");
-          return bParts.length - aParts.length;
-        }
-      );
+  const mostSpecific = route
+    .children?.({ path: route.path, params: match.params })
+    ?.sort(
+      (
+        a: RouteDefinition<any, any, any>,
+        b: RouteDefinition<any, any, any>
+      ) => {
+        const aParts = a.path.split("/");
+        const bParts = b.path.split("/");
+        return bParts.length - aParts.length;
+      }
+    );
+  if (mostSpecific) {
     for (const child of mostSpecific) {
       children = renderRoute(child, match.remainingPath, urlSearchParams);
       if (children) break;

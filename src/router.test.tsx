@@ -57,11 +57,11 @@ test("router typing", () => {
             </div>
           );
         },
-        children: (parent) => [],
+        children: (parent) => undefined,
       }),
       route({
         path: "user/$userId/post",
-        children: (parent) => [],
+        children: (parent) => undefined,
       }),
       route({
         path: "user/$userId/post/$postId",
@@ -77,14 +77,14 @@ test("router typing", () => {
         children: (parent) => [
           route({
             path: "comments",
-            children: (parent) => [],
+            children: (parent) => undefined,
           }),
           route({
             path: "comments/$commentId",
             search({ params, urlSearchParams }) {
               return { search: urlSearchParams.get("search") ?? undefined };
             },
-            children: (parent) => [],
+            children: (parent) => undefined,
           }),
         ],
       }),
@@ -179,7 +179,7 @@ test("router renders root route", () => {
         </div>
       );
     },
-    children: (parent) => [],
+    children: (parent) => undefined,
   });
   const { container } = render(<router.Router />);
   expect(container).toHaveTextContent("");
@@ -206,14 +206,14 @@ test("router switches between two routes", async () => {
         render({ children }) {
           return <div>RouteA</div>;
         },
-        children: (parent) => [],
+        children: (parent) => undefined,
       }),
       route({
         path: "b",
         render({ children }) {
           return <div>RouteB</div>;
         },
-        children: (parent) => [],
+        children: (parent) => undefined,
       }),
     ],
   });
@@ -268,14 +268,14 @@ test("navigation works with clicks", async () => {
         render({ children }) {
           return <div>RouteA</div>;
         },
-        children: (parent) => [],
+        children: (parent) => undefined,
       }),
       route({
         path: "b",
         render({ children }) {
           return <div>RouteB</div>;
         },
-        children: (parent) => [],
+        children: (parent) => undefined,
       }),
     ],
   });
@@ -311,14 +311,14 @@ test("navigation works with links", async () => {
         render({ children }) {
           return <div>RouteA</div>;
         },
-        children: (parent) => [],
+        children: (parent) => undefined,
       }),
       route({
         path: "b",
         render({ children }) {
           return <div>RouteB</div>;
         },
-        children: (parent) => [],
+        children: (parent) => undefined,
       }),
     ],
   });
@@ -341,14 +341,14 @@ test("more specific routes take precedence", async () => {
         render({ children }) {
           return <div>RouteA</div>;
         },
-        children: (parent) => [],
+        children: (parent) => undefined,
       }),
       route({
         path: "a/b",
         render({ children }) {
           return <div>RouteSpecific</div>;
         },
-        children: (parent) => [],
+        children: (parent) => undefined,
       }),
     ],
   });
@@ -370,7 +370,7 @@ test("render method gets path params", () => {
         render({ children, params }) {
           return <div>RouteA {params.id}</div>;
         },
-        children: (parent) => [],
+        children: (parent) => undefined,
       }),
     ],
   });
@@ -397,7 +397,7 @@ test("render method gets search params", () => {
         render({ children, params, search }) {
           return <div>RouteA {search.id}</div>;
         },
-        children: (parent) => [],
+        children: (parent) => undefined,
       }),
     ],
   });
@@ -436,7 +436,7 @@ test("child routes get parent path params", () => {
                 </div>
               );
             },
-            children: (parent) => [],
+            children: (parent) => undefined,
           }),
         ],
       }),
