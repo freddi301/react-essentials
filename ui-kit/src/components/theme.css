@@ -1,0 +1,115 @@
+.theme {
+  --card-margin: 8px;
+  --table-padding-vertical: 8px;
+  --table-padding-horizontal: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.theme.dark {
+  --primary-background-color: #111111;
+  --secondary-background-color: #1a1a1a;
+  --hover-background-color: #222222;
+  --primary-text-color: #ffffff;
+  --secondary-text-color: #aaaaaa;
+  --border-color: #444444;
+  color: var(--primary-text-color);
+}
+
+.theme.light {
+  --primary-background-color: #ffffff;
+  --secondary-background-color: #eaeaea;
+  --hover-background-color: #dddddd;
+  --primary-text-color: #000000;
+  --secondary-text-color: #666666;
+  --border-color: #cccccc;
+  color: var(--primary-text-color);
+}
+
+.primary-background {
+  background-color: var(--primary-background-color);
+}
+
+.secondary-background {
+  background-color: var(--secondary-background-color);
+}
+
+.primary-text-color {
+  color: var(--primary-text-color);
+}
+
+.secondary-text-color {
+  color: var(--secondary-text-color);
+}
+
+.card.margin {
+  margin: var(--card-margin);
+}
+
+.card.margin-vertical {
+  margin-top: var(--card-margin);
+  margin-bottom: var(--card-margin);
+}
+
+.card.margin + .card.margin {
+  margin-left: 0;
+}
+
+.card.round {
+  border-radius: 8px;
+}
+
+.card.border {
+  border: 1px solid var(--border-color);
+  box-sizing: border-box;
+}
+
+.theme table {
+  border-collapse: collapse;
+  margin: var(--table-padding-vertical) 0;
+  width: 100%;
+}
+
+.theme table td {
+  padding: var(--table-padding-vertical) var(--table-padding-horizontal);
+}
+
+.theme table td:first-child {
+  padding-left: calc(var(--table-padding-horizontal) * 2);
+}
+
+.theme table td:last-child {
+  padding-right: calc(var(--table-padding-horizontal) * 2);
+}
+
+.row {
+  padding: var(--table-padding-vertical)
+    calc(var(--table-padding-horizontal) * 2);
+}
+
+.row:first-child {
+  margin-top: var(--table-padding-vertical);
+}
+
+.row.border:first-child {
+  margin-top: 0;
+}
+
+.row:last-child {
+  margin-bottom: var(--table-padding-vertical);
+}
+
+.row.border {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.row.hoverable:hover {
+  background-color: var(--hover-background-color);
+}
+
+table.hoverable tr:hover {
+  background-color: var(--hover-background-color);
+}

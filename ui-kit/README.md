@@ -72,3 +72,7 @@ always provide light and dark theme (must repsect accessbility too)
 
 Content is organized by spacing (it can be strenghtened with background color + borders)
 Importance is expressend with font weight + size and color
+
+# Other notes
+
+- number in tables must be aligned right
