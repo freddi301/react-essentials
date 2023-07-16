@@ -76,3 +76,31 @@ Importance is expressend with font weight + size and color
 # Other notes
 
 - number in tables must be aligned right
+
+Mandatory
+Ui must look organized only by using mandatory style, optional style is enhancement
+All information should be expressed by text
+Organizatuon must be expressend by spacing, text size (title, subtitle, paragraph) and postioning
+In cards avoid label: value use postioning/font weight
+In tables label is the column name, value is the cell
+Only one size horzontal and vertical spacing should be used for list-item./ Section
+Inouts must have different background color
+
+Optional
+Organization can be enhanced by background-color (primary, seocndary) and/or border (one type of border)
+Badges for secondary text info
+Font-weigh (bold 600/regular 700)
+Font-color (primary/secondary)
+
+Basic view structure
+Text only, veritical section with title and parapgraphs
+Tables/lists
+Cards
+
+Other
+List/table items (like rows in a table, same entities) must have hover background
+Actions must be buttons
+Navigation must be links
+Diabled-ui-state must be provided for loading states and or unallowed actions
+Contextual actions may appear only if all info for a informed user decision is on screen
+Only one font for text, monosoaced version for code

@@ -1,18 +1,31 @@
 import React from "react";
 
+// TODO fix invalidation e reloading
+
 // TODO let user track mutations more easily (just returning mutation promise now)
 
 type Resource<Variables, Data> = {
+  resolver(variables: Variables): Promise<Data>;
+  /** throws promise if not cached */
   read(variables: Variables): Data;
   invalidate(criteria: (variables: Variables) => boolean): void;
   invalidateAll(): void;
   invalidateExact(variables: Variables): void;
   invalidatePartial(variables: RecursivelyPartial<Variables>): void;
   subscribe(variables: Variables, listener: Listener): Unsubscribe;
+  /** cuases component to suspend */
   useData(
     variables: Variables,
     options?: { revalidateOnMount?: boolean }
   ): Data;
+  /** do not uses suspense */
+  useQuery(
+    variables: Variables,
+    options?: { revalidateOnMount?: boolean }
+  ): {
+    data?: Data;
+    isLoading: boolean;
+  };
 };
 
 type Listener = () => void;
@@ -35,15 +48,15 @@ export function createResource<Variables, Data>(
     revalidateAfter?: number;
   } = {}
 ): Resource<Variables, Data> {
-  type Entry =
-    | { data: Data; isValid: true; revalidateAfterTimeoutId: number }
-    | {
-        data: Data;
-        isValid: false;
-        promise?: Promise<Data>;
-        revalidateAfterTimeoutId: number;
-      }
-    | { promise: Promise<Data> };
+  type Entry = {
+    isValid: boolean;
+    revalidateAfterTimeoutId: ReturnType<typeof setTimeout> | null;
+  } & ({ hasData: true; data: Data } | { hasData: false }) &
+    (
+      | { isResolving: true; promise: Promise<Data>; resolutionId: number }
+      | { isResolving: false }
+    ) &
+    ({ hasError: true; error: unknown } | { hasError: false });
   const cache = new Map<Variables, Entry>();
   const findEntry = (
     variables: Variables
@@ -68,60 +81,119 @@ export function createResource<Variables, Data>(
     }
     throw error;
   };
-  const udpateEntry = (variables: Variables) => (data: Data) => {
-    const found = findEntry(variables);
-    if (found && "revalidateAfterTimeoutId" in found.entry) {
-      window.clearTimeout(found.entry.revalidateAfterTimeoutId);
-    }
-    const revalidateAfterTimeoutId = window.setTimeout(() => {
-      resource.invalidateExact(variables);
-    }, revalidateAfter);
-    cache.set(variables, {
-      isValid: true,
-      data:
-        found && "data" in found.entry
-          ? (reuseInstances(found.entry.data, data) as Data)
-          : data,
-      revalidateAfterTimeoutId,
-    });
+  const notify = (variables: Variables) => {
     subscriptions.forEach((subscription) => {
       if (deepIsEqual(subscription.variables, variables)) {
         subscription.listener();
       }
     });
   };
+
+  const resolve = (variables: Variables): Promise<Data> => {
+    let found = findEntry(variables);
+    if (!found) {
+      const entry: Entry = {
+        isValid: false,
+        revalidateAfterTimeoutId: null,
+        hasData: false,
+        isResolving: false,
+        hasError: false,
+      };
+      cache.set(variables, entry);
+      found = { variables, entry };
+    }
+    if (found.entry.revalidateAfterTimeoutId) {
+      clearTimeout(found.entry.revalidateAfterTimeoutId);
+    }
+    const revalidateAfterTimeoutId = setTimeout(() => {
+      resource.invalidateExact(variables);
+    }, revalidateAfter);
+    const resolutionId = Math.random();
+    const promise = tryResolve(variables);
+    cache.set(variables, {
+      isValid: true,
+      revalidateAfterTimeoutId,
+      ...(found.entry.hasData
+        ? {
+            hasData: true,
+            data: found.entry.data,
+          }
+        : { hasData: false }),
+      isResolving: true,
+      resolutionId,
+      promise,
+      hasError: false,
+    });
+    promise.then(
+      (data) => {
+        const found = findEntry(variables);
+        if (
+          found &&
+          found.entry.isResolving &&
+          found.entry.resolutionId !== resolutionId
+        ) {
+          return;
+        }
+        cache.set(variables, {
+          isValid: true,
+          revalidateAfterTimeoutId,
+          hasData: true,
+          data:
+            found && found.entry.hasData
+              ? (reuseInstances(found.entry.data, data) as Data)
+              : data,
+          isResolving: false,
+          hasError: false,
+        });
+        notify(variables);
+      },
+      (error) => {
+        const found = findEntry(variables);
+        if (
+          found &&
+          found.entry.isResolving &&
+          found.entry.resolutionId !== resolutionId
+        ) {
+          return;
+        }
+        cache.set(variables, {
+          isValid: found?.entry.isValid ?? true,
+          revalidateAfterTimeoutId,
+          hasData: false,
+          isResolving: false,
+          hasError: true,
+          error,
+        });
+        notify(variables);
+      }
+    );
+    return promise;
+  };
   const resource: Resource<Variables, Data> = {
+    resolver,
     read(variables) {
       const found = findEntry(variables);
       if (!found) {
-        const promise = tryResolve(variables);
-        cache.set(variables, { promise });
-        promise.then(udpateEntry(variables));
-        throw promise;
+        throw resolve(variables);
       } else {
-        if ("isValid" in found.entry && !found.entry.isValid) {
-          const promise = tryResolve(variables);
-          cache.set(variables, {
-            data: found.entry.data,
-            isValid: false,
-            promise,
-            revalidateAfterTimeoutId: found.entry.revalidateAfterTimeoutId,
-          });
-          promise.then(udpateEntry(variables));
+        if (!found.entry.isValid) {
+          throw resolve(variables);
+        } else if (found.entry.hasError) {
+          throw found.entry.error;
+        } else if (found.entry.hasData) {
+          return found.entry.data;
+        } else if (found.entry.isResolving) {
+          throw found.entry.promise;
+        } else {
+          throw new Error(); // it should not get here
         }
-        if ("data" in found.entry) return found.entry.data;
-        else throw found.entry.promise;
       }
     },
     invalidate(criteria) {
       for (const [variables, entry] of cache.entries()) {
         if (criteria(variables)) {
           if ("isValid" in entry) entry.isValid = false;
-          subscriptions.forEach((subscription) => {
-            if (deepIsEqual(subscription.variables, variables)) {
-              subscription.listener();
-            }
-          });
+          notify(variables);
         }
       }
     },
@@ -154,6 +226,10 @@ export function createResource<Variables, Data>(
       const reused = reuseInstances(previous.current, data) as Data;
       previous.current = data;
       return reused;
+    },
+    useQuery(variables, { revalidateOnMount = true } = {}) {
+      // TODO
+      throw new Error("not yet implemented");
     },
   };
   if (revalidateOnFocus) {
