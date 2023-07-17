@@ -1,199 +1,287 @@
 import React from "react";
 
-// TODO fix invalidation e reloading
-
-// TODO let user track mutations more easily (just returning mutation promise now)
+/*
+TODO:
+- let user track mutations more easily (just returning mutation promise now)
+- check online status (https://tanstack.com/query/latest/docs/react/guides/network-mode)
+*/
 
 type Resource<Variables, Data> = {
   resolver(variables: Variables): Promise<Data>;
-  /** throws promise if not cached */
+  resolve(variables: Variables): Promise<Data>;
+  getStatus(variables: Variables): Status<Data>;
   read(variables: Variables): Data;
   invalidate(criteria: (variables: Variables) => boolean): void;
   invalidateAll(): void;
   invalidateExact(variables: Variables): void;
   invalidatePartial(variables: RecursivelyPartial<Variables>): void;
   subscribe(variables: Variables, listener: Listener): Unsubscribe;
-  /** cuases component to suspend */
-  useData(
+  /** does not suspend */
+  useStatus(
+    variables: Variables,
+    options?: { revalidateOnMount?: boolean }
+  ): Status<Data>;
+  /** does suspend */
+  useRead(
     variables: Variables,
     options?: { revalidateOnMount?: boolean }
   ): Data;
-  /** do not uses suspense */
-  useQuery(
-    variables: Variables,
-    options?: { revalidateOnMount?: boolean }
-  ): {
-    data?: Data;
-    isLoading: boolean;
-  };
 };
+
+type Entry<Variables, Data> = {
+  nextResolutionId: number;
+  expectedResolutionId: number;
+  resolutions: Record<number, Resolution<Data>>;
+  subscriptions: Set<{ variables: Variables; listener: Listener }>;
+  cachedData?: Data;
+  revalidateAfterTimeoutId?: ReturnType<typeof setTimeout>;
+  retryTimeoutId?: ReturnType<typeof setTimeout>;
+};
+
+type Resolution<Data> =
+  | PendingResolution<Data>
+  | ResolvedResolution<Data>
+  | RejectedResolution;
+
+type PendingResolution<Data> = {
+  status: "pending";
+  promise: Promise<Data>;
+  resolutionId: number;
+  startTimestamp: number;
+};
+
+type ResolvedResolution<Data> = {
+  status: "resolved";
+  data: Data;
+  resolutionId: number;
+  startTimestamp: number;
+  endTimestamp: number;
+};
+
+type RejectedResolution = {
+  status: "rejected";
+  error: unknown;
+  resolutionId: number;
+  startTimestamp: number;
+  endTimestamp: number;
+};
+
+type Status<Data> = {
+  isValid: boolean;
+} & DependentFields<"isResolving", "promise", Promise<Data>> &
+  DependentFields<"hasData", "data", Data> &
+  DependentFields<"hasError", "error", unknown>;
 
 type Listener = () => void;
 type Unsubscribe = () => void;
 
+type DependentFields<
+  BooleanField extends string,
+  Field extends string,
+  Value
+> =
+  | ({
+      [K in BooleanField]: true;
+    } & {
+      [K in Field]: Value;
+    })
+  | {
+      [K in BooleanField]: false;
+    };
+
 export function createResource<Variables, Data>(
   resolver: (variables: Variables) => Promise<Data>,
   {
-    shouldRetry = ({ retries }) => {
-      if (retries > 3) return false;
-      return 1000 * Math.pow(retries, 2);
-    },
+    /** 0 to disable */
+    revalidateAfterMs = 5 * 60 * 1000,
     revalidateOnFocus = true,
     revalidateOnConnect = true,
-    revalidateAfter = 5 * 60 * 1000,
+    /** 0 to stop retrying */
+    shouldRetryInMs = ({ retries }) => {
+      if (retries > 3) return 0;
+      return 1000 * Math.pow(retries, 2);
+    },
   }: {
-    shouldRetry?(_: { retries: number; error: unknown }): number | false;
+    revalidateAfterMs?: number;
     revalidateOnFocus?: boolean;
     revalidateOnConnect?: boolean;
-    revalidateAfter?: number;
+    shouldRetryInMs?(_: { retries: number; error: unknown }): number;
   } = {}
 ): Resource<Variables, Data> {
-  type Entry = {
-    isValid: boolean;
-    revalidateAfterTimeoutId: ReturnType<typeof setTimeout> | null;
-  } & ({ hasData: true; data: Data } | { hasData: false }) &
-    (
-      | { isResolving: true; promise: Promise<Data>; resolutionId: number }
-      | { isResolving: false }
-    ) &
-    ({ hasError: true; error: unknown } | { hasError: false });
-  const cache = new Map<Variables, Entry>();
-  const findEntry = (
-    variables: Variables
-  ): { variables: Variables; entry: Entry } | undefined => {
+  const cache = new Map<Variables, Entry<Variables, Data>>();
+  const findEntry = (variables: Variables): Entry<Variables, Data> => {
     for (const [entryVariables, entry] of cache.entries()) {
       if (deepIsEqual(entryVariables, variables)) {
-        return { variables: entryVariables, entry };
+        return entry;
       }
     }
+    const entry: Entry<Variables, Data> = {
+      nextResolutionId: 0,
+      expectedResolutionId: 0,
+      resolutions: {},
+      subscriptions: new Set(),
+    };
+    cache.set(variables, entry);
+    return entry;
   };
-  const subscriptions = new Set<{ variables: Variables; listener: Listener }>();
-  const tryResolve = async (variables: Variables): Promise<Data> => {
-    let retries = 1;
-    let error;
-    while (shouldRetry({ retries, error })) {
-      try {
-        return await resolver(variables);
-      } catch (e) {
-        error = e;
-        retries++;
-      }
-    }
-    throw error;
-  };
-  const notify = (variables: Variables) => {
-    subscriptions.forEach((subscription) => {
-      if (deepIsEqual(subscription.variables, variables)) {
-        subscription.listener();
-      }
+  const notify = (entry: Entry<Variables, Data>) => {
+    entry.subscriptions.forEach((subscription) => {
+      subscription.listener();
     });
   };
-
-  const resolve = (variables: Variables): Promise<Data> => {
-    let found = findEntry(variables);
-    if (!found) {
-      const entry: Entry = {
-        isValid: false,
-        revalidateAfterTimeoutId: null,
-        hasData: false,
-        isResolving: false,
-        hasError: false,
-      };
-      cache.set(variables, entry);
-      found = { variables, entry };
-    }
-    if (found.entry.revalidateAfterTimeoutId) {
-      clearTimeout(found.entry.revalidateAfterTimeoutId);
-    }
-    const revalidateAfterTimeoutId = setTimeout(() => {
-      resource.invalidateExact(variables);
-    }, revalidateAfter);
-    const resolutionId = Math.random();
-    const promise = tryResolve(variables);
-    cache.set(variables, {
-      isValid: true,
-      revalidateAfterTimeoutId,
-      ...(found.entry.hasData
-        ? {
-            hasData: true,
-            data: found.entry.data,
-          }
-        : { hasData: false }),
-      isResolving: true,
-      resolutionId,
-      promise,
-      hasError: false,
-    });
-    promise.then(
-      (data) => {
-        const found = findEntry(variables);
-        if (
-          found &&
-          found.entry.isResolving &&
-          found.entry.resolutionId !== resolutionId
-        ) {
-          return;
-        }
-        cache.set(variables, {
-          isValid: true,
-          revalidateAfterTimeoutId,
-          hasData: true,
-          data:
-            found && found.entry.hasData
-              ? (reuseInstances(found.entry.data, data) as Data)
-              : data,
-          isResolving: false,
-          hasError: false,
-        });
-        notify(variables);
-      },
-      (error) => {
-        const found = findEntry(variables);
-        if (
-          found &&
-          found.entry.isResolving &&
-          found.entry.resolutionId !== resolutionId
-        ) {
-          return;
-        }
-        cache.set(variables, {
-          isValid: found?.entry.isValid ?? true,
-          revalidateAfterTimeoutId,
-          hasData: false,
-          isResolving: false,
-          hasError: true,
-          error,
-        });
-        notify(variables);
-      }
+  const retryIt = (variables: Variables) => {
+    const entry = findEntry(variables);
+    const resolutions = Object.values(entry.resolutions).sort(
+      (a, b) => b.resolutionId - a.resolutionId
     );
-    return promise;
+    const lastResolution = resolutions[0];
+    if (lastResolution.status === "rejected") {
+      const error = lastResolution.error;
+      let retries = 0;
+      for (let i = 0; i < resolutions.length; i++) {
+        const resolution = resolutions[i];
+        if (resolution.status === "rejected") retries++;
+        else break;
+      }
+      const retryInMs = shouldRetryInMs({ error, retries });
+      if (retryInMs > 0) {
+        entry.retryTimeoutId = setTimeout(() => {
+          resource.resolve(variables);
+        }, retryInMs);
+      }
+    }
+  };
+  const garbageCollectResolutions = (entry: Entry<Variables, Data>) => {
+    const resolutions = Object.values(entry.resolutions).sort(
+      (a, b) => b.resolutionId - a.resolutionId
+    );
+    let startDeleting = false;
+    for (let i = 1; i < resolutions.length; i++) {
+      const resolution = resolutions[i];
+      if (resolution.status === "resolved") startDeleting = true;
+      if (startDeleting) delete entry.resolutions[resolution.resolutionId];
+    }
+  };
+  const garbageCollectEntries = () => {
+    for (const [variables, entry] of cache.entries()) {
+      if (entry.subscriptions.size === 0) {
+        cache.delete(variables);
+      }
+    }
   };
   const resource: Resource<Variables, Data> = {
     resolver,
-    read(variables) {
-      const found = findEntry(variables);
-      if (!found) {
-        throw resolve(variables);
-      } else {
-        if (!found.entry.isValid) {
-          throw resolve(variables);
-        } else if (found.entry.hasError) {
-          throw found.entry.error;
-        } else if (found.entry.hasData) {
-          return found.entry.data;
-        } else if (found.entry.isResolving) {
-          throw found.entry.promise;
-        } else {
-          throw new Error(); // it should not get here
+    resolve(variables) {
+      const entry = findEntry(variables);
+      const startTimestamp = Date.now();
+      const promise = resolver(variables);
+      const resolutionId = entry.nextResolutionId++;
+      const resolution: PendingResolution<Data> = {
+        status: "pending",
+        resolutionId,
+        promise,
+        startTimestamp,
+      };
+      entry.resolutions[resolutionId] = resolution;
+      promise.then(
+        (data) => {
+          const endTimestamp = Date.now();
+          const resolution: ResolvedResolution<Data> = {
+            status: "resolved",
+            resolutionId,
+            data,
+            startTimestamp,
+            endTimestamp,
+          };
+          const entry = findEntry(variables);
+          entry.resolutions[resolutionId] = resolution;
+          if (entry.retryTimeoutId) {
+            clearTimeout(entry.retryTimeoutId);
+          }
+          garbageCollectResolutions(entry);
+        },
+        (error) => {
+          const endTimestamp = Date.now();
+          const resolution: RejectedResolution = {
+            status: "rejected",
+            resolutionId,
+            error,
+            startTimestamp,
+            endTimestamp,
+          };
+          const entry = findEntry(variables);
+          entry.resolutions[resolutionId] = resolution;
+          retryIt(variables);
+          garbageCollectResolutions(entry);
         }
+      );
+      if (revalidateAfterMs > 0) {
+        promise.finally(() => {
+          const entry = findEntry(variables);
+          if (entry.revalidateAfterTimeoutId) {
+            clearTimeout(entry.revalidateAfterTimeoutId);
+          }
+          entry.revalidateAfterTimeoutId = setTimeout(() => {
+            const entry = findEntry(variables);
+            if (entry.subscriptions.size > 0) {
+              resource.resolve(variables);
+            }
+          }, revalidateAfterMs);
+        });
       }
+      garbageCollectResolutions(entry);
+      return promise;
+    },
+    getStatus(variables) {
+      const entry = findEntry(variables);
+      const resolutions = Object.values(entry.resolutions).sort(
+        (a, b) => b.resolutionId - a.resolutionId
+      );
+      const lastResolution = resolutions[0];
+      const isValid =
+        lastResolution?.resolutionId >= entry.expectedResolutionId;
+      const dataResolution = resolutions.find(
+        (resolution) => resolution.status === "resolved"
+      ) as ResolvedResolution<Data> | undefined;
+      const errorResolution = resolutions.find(
+        (resolution) =>
+          resolution.status === "rejected" &&
+          resolution.resolutionId > (dataResolution?.resolutionId ?? -1)
+      ) as RejectedResolution | undefined;
+      return {
+        isValid,
+        ...(lastResolution?.status === "pending"
+          ? { isResolving: true, promise: lastResolution.promise }
+          : { isResolving: false }),
+        ...(dataResolution
+          ? {
+              hasData: true,
+              data: (entry.cachedData = reuseInstances(
+                entry.cachedData,
+                dataResolution.data
+              ) as Data),
+            }
+          : { hasData: false }),
+        ...(errorResolution
+          ? { hasError: true, error: errorResolution.error }
+          : { hasError: false }),
+      };
+    },
+    read(variables) {
+      const status = resource.getStatus(variables);
+      if (status.hasError) throw status.error;
+      if (status.isResolving) throw status.promise;
+      if (status.hasData) return status.data;
+      throw resource.resolve(variables);
     },
     invalidate(criteria) {
       for (const [variables, entry] of cache.entries()) {
         if (criteria(variables)) {
-          if ("isValid" in entry) entry.isValid = false;
-          notify(variables);
+          entry.expectedResolutionId = entry.nextResolutionId;
+          if (entry.subscriptions.size > 0) {
+            resource.resolve(variables);
+            notify(entry);
+          }
         }
       }
     },
@@ -207,29 +295,59 @@ export function createResource<Variables, Data>(
       resource.invalidate((other) => partialDeepEqual(variables, other));
     },
     subscribe(variables, listener) {
+      const entry = findEntry(variables);
       const subscription = { variables, listener };
-      subscriptions.add(subscription);
-      return () => subscriptions.delete(subscription);
+      entry.subscriptions.add(subscription);
+      const status = resource.getStatus(variables);
+      if (!status.isValid) {
+        resource.resolve(variables);
+      }
+      return () => {
+        entry.subscriptions.delete(subscription);
+        garbageCollectEntries();
+      };
     },
-    useData(variables, { revalidateOnMount = true } = {}) {
+    useStatus(variables, { revalidateOnMount = true } = {}) {
+      const structuralVariables = useStructuralValue(variables);
+      const [status, setStatus] = React.useState(() =>
+        resource.getStatus(structuralVariables)
+      );
+      React.useEffect(() => {
+        if (revalidateOnMount) {
+          resource.resolve(structuralVariables);
+        }
+        return resource.subscribe(structuralVariables, () => {
+          setStatus(resource.getStatus(structuralVariables));
+        });
+      }, [revalidateOnMount, structuralVariables]);
+      const lastDataRef = React.useRef(
+        status.hasData ? status.data : undefined
+      );
+      if (status.hasData) {
+        const reusedInstances = reuseInstances(
+          lastDataRef.current,
+          status.data
+        ) as Data;
+        lastDataRef.current = reusedInstances;
+        status.data = reusedInstances;
+      }
+      return status;
+    },
+    useRead(variables, { revalidateOnMount = true } = {}) {
+      const structuralVariables = useStructuralValue(variables);
       const [, forceUpdate] = React.useState(0);
       React.useEffect(() => {
         if (revalidateOnMount) {
-          resource.invalidateExact(variables);
+          resource.resolve(structuralVariables);
         }
-        return resource.subscribe(variables, () =>
-          forceUpdate((count) => count + 1)
-        );
-      }, [variables, revalidateOnMount]);
-      const previous = React.useRef<Data>();
-      const data = resource.read(variables);
-      const reused = reuseInstances(previous.current, data) as Data;
-      previous.current = data;
-      return reused;
-    },
-    useQuery(variables, { revalidateOnMount = true } = {}) {
-      // TODO
-      throw new Error("not yet implemented");
+        return resource.subscribe(structuralVariables, () => {
+          forceUpdate((count) => count + 1);
+        });
+      }, [revalidateOnMount, structuralVariables]);
+      const data = resource.read(structuralVariables);
+      const lastDataRef = React.useRef(data);
+      lastDataRef.current = reuseInstances(lastDataRef.current, data) as Data;
+      return lastDataRef.current;
     },
   };
   if (revalidateOnFocus) {
@@ -367,4 +485,12 @@ export function reuseInstances(cached: unknown, incoming: unknown) {
     return reconstructed;
   }
   return incoming;
+}
+
+function useStructuralValue<Value>(value: Value) {
+  const lastValueRef = React.useRef(value);
+  if (!deepIsEqual(lastValueRef.current, value)) {
+    lastValueRef.current = value;
+  }
+  return lastValueRef.current;
 }

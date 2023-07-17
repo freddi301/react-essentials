@@ -2,7 +2,7 @@
  * @jest-environment jsdom
  */
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
 import { createMutation, createResource, reuseInstances } from "./client";
@@ -85,7 +85,7 @@ test("resource works with React.Suspense", async () => {
   const doubleResource = createResource(getDouble);
   function Component() {
     const [count, setCount] = React.useState(0);
-    const double = doubleResource.useData(count);
+    const double = doubleResource.useRead(count);
     return (
       <div>
         <div>Count: {count}</div>
@@ -117,15 +117,19 @@ test("resource works with React.Suspense", async () => {
 });
 
 test("resource works with React.Suspense + React.useTransition", async () => {
+  let unBlock: (value: unknown) => void;
   async function getDouble(x: number) {
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => {
+      unBlock = resolve;
+    });
     return x * 2;
   }
   const doubleResource = createResource(getDouble);
   function Component() {
     const [count, setCount] = React.useState(0);
-    const double = doubleResource.useData(count);
+    const double = doubleResource.useRead(count);
     const [isPending, startTransition] = React.useTransition();
+    console.log("isPending", isPending);
     return (
       <div>
         <div>Count: {count}</div>
@@ -149,16 +153,18 @@ test("resource works with React.Suspense + React.useTransition", async () => {
     </React.Suspense>
   );
   expect(screen.getByText("loading")).toBeInTheDocument();
-  expect(await screen.findByText("Count: 0")).toBeInTheDocument();
-  expect(screen.getByText("Is pending: false")).toBeInTheDocument();
+  act(() => unBlock(undefined));
+  expect(await screen.findByText("Is pending: false")).toBeInTheDocument();
+  expect(screen.getByText("Count: 0")).toBeInTheDocument();
   expect(screen.getByText("Double: 0")).toBeInTheDocument();
   expect(screen.queryByText("loading")).not.toBeInTheDocument();
   userEvent.click(screen.getByText("Increase"));
-  expect(screen.queryByText("loading")).not.toBeInTheDocument();
+  act(() => unBlock(undefined));
   expect(await screen.findByText("Is pending: true")).toBeInTheDocument();
   expect(screen.getByText("Count: 0")).toBeInTheDocument();
   expect(screen.getByText("Double: 0")).toBeInTheDocument();
   expect(screen.queryByText("loading")).not.toBeInTheDocument();
+  act(() => unBlock(undefined));
   expect(await screen.findByText("Is pending: false")).toBeInTheDocument();
   expect(screen.getByText("Count: 1")).toBeInTheDocument();
   expect(screen.getByText("Double: 2")).toBeInTheDocument();
@@ -182,7 +188,7 @@ test("resources invalidated by a mutation are reloaded", async () => {
     },
   });
   function Component() {
-    const entity = entityResource.useData(undefined);
+    const entity = entityResource.useRead(undefined);
     return (
       <div>
         <div>Entity: {entity}</div>
