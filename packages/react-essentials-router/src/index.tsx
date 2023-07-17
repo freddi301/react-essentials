@@ -32,11 +32,11 @@ type RouteDefinition<
     urlSearchParams: URLSearchParams;
   }): Search;
   validate?(_: { params: ParamsFromPath<Path>; search: Search }): boolean;
-  Component?(_: {
+  Component?: React.ComponentType<{
     params: ParamsFromPath<Path>;
     search: Search;
     children: React.ReactNode;
-  }): React.ReactNode;
+  }>;
   /** this can't be optional due to typescript limitations */
   children(parent: { path: Path; params: ParamsFromPath<Path> }): Children;
 };
@@ -88,7 +88,7 @@ type Router<
     path: P;
     children: React.ReactNode;
     /** oveeride default rendering */
-    Component?(_: {
+    Component?: React.ComponentType<{
       path: P;
       params: ParamsFromPath<P>;
       children: React.ReactNode;
@@ -96,7 +96,7 @@ type Router<
       isActive: boolean;
       href: string;
       navigate(): void;
-    }): React.ReactNode;
+    }>;
     search?: any; // TODO
   } & (ParamsFromPathRecursive<"", P> extends ""
     ? { params?: ParamsFromPath<P> }
@@ -105,11 +105,11 @@ type Router<
     path,
   }: {
     path: P;
-    Component?(_: {
+    Component?: React.ComponentType<{
       path: P;
       params: ParamsFromPath<P>;
       children: React.ReactNode;
-    }): React.ReactNode;
+    }>;
     children?: React.ReactNode;
   }): React.ReactNode;
   Router: React.ComponentType<{}>;
