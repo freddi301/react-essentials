@@ -1,5 +1,5 @@
 import React from "react";
-import { Field, fieldProps, useField } from "./form";
+import { Field, fieldProps, useField } from ".";
 
 function MyForm() {
   const name = useField<string>({ initialValue: "John Doe" });

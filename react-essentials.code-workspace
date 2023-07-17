@@ -1,0 +1,22 @@
+{
+  "folders": [
+    {
+      "path": "."
+    },
+    {
+      "path": "packages/react-essentials-client"
+    },
+    {
+      "path": "packages/react-essentials-form"
+    },
+    {
+      "path": "packages/react-essentials-router"
+    },
+    {
+      "path": "packages/react-essentials-ui"
+    }
+  ],
+  "settings": {
+    "editor.formatOnSave": true
+  }
+}

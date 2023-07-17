@@ -2,8 +2,8 @@
  * @jest-environment jsdom
  */
 import React from "react";
-import { createRouter, route } from "./router";
-import { createResource } from "./client";
+import { createRouter, route } from ".";
+import { createResource } from "react-essentials-client";
 
 async function getData(x: string) {
   await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -31,7 +31,7 @@ const { Router, Link, useRouterState } = createRouter(
       route({
         path: "a",
         Component() {
-          const data = dataResource.useData("A");
+          const data = dataResource.useRead("A");
           return <h1>A + {data}</h1>;
         },
         children: (parent) => undefined,
