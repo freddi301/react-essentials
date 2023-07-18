@@ -1,8 +1,6 @@
 # Ui kit
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
-
-# Replicate
+## Replicate
 
 - search-engine (google.com)
 - chat (whatsapp.com)
@@ -12,9 +10,7 @@ This project was bootstrapped with [Create React App](https://github.com/faceboo
 - dev (github.com)
 - admin (https://minimals.cc/)
 
-# Common Elements
-
-Almost every page has:
+## Common Elements
 
 - left bar (usually nav) with collapsible items
 - top bar (usually nav or header for content + searchbar)
@@ -51,7 +47,49 @@ Almost every page has:
 - left bar for advanced search (expandable checkboxes, etc)
 - badges (decoration for secondary info)
 
-# Colors
+## Meaning and organization
+
+Ui must look organized even disabling optional styles
+
+MANDATORY
+
+- All information should be expressed by text
+- Positioning
+- Spacing
+- Text size (title, subtitle, paragraph)
+
+ENCHANCEMENT
+
+- background color (primary, secondary)
+- border (one type of border)
+- Font-weight (bold 600/regular 700)
+- Font-color (primary/secondary)
+- Badges for secondary text info
+
+RECCOMANDATIONS
+
+- Importance is expressend with font weight + size and color
+- In cards avoid label: value use positioning and/or font weight
+- In tables label is the column name, value is the cell
+- Only one size horzontal and vertical spacing should be used for list-item / Section
+- Inputs must have different background color
+- List/table items (like rows in a table, same entities) must have hover background
+- Actions must be buttons
+- Navigation must be links
+- Disabled-ui-state must be provided for loading states and or unallowed actions
+- Contextual actions may appear only if all info for a informed user decision is on screen
+- Only one font for text, monospaced version for code
+- number in tables must be aligned right
+
+## Layout
+
+Start organizing layout with these simple elements
+
+- Text only, veritical section with title and parapgraphs
+- Tables/lists
+- Cards
+
+## Colors
 
 See colorandcontrast.com
 
@@ -67,40 +105,3 @@ See colorandcontrast.com
 both text colors must have good contrast wiht both background colors
 
 always provide light and dark theme (must repsect accessbility too)
-
-# Spacing
-
-Content is organized by spacing (it can be strenghtened with background color + borders)
-Importance is expressend with font weight + size and color
-
-# Other notes
-
-- number in tables must be aligned right
-
-Mandatory
-Ui must look organized only by using mandatory style, optional style is enhancement
-All information should be expressed by text
-Organizatuon must be expressend by spacing, text size (title, subtitle, paragraph) and postioning
-In cards avoid label: value use postioning/font weight
-In tables label is the column name, value is the cell
-Only one size horzontal and vertical spacing should be used for list-item./ Section
-Inouts must have different background color
-
-Optional
-Organization can be enhanced by background-color (primary, seocndary) and/or border (one type of border)
-Badges for secondary text info
-Font-weigh (bold 600/regular 700)
-Font-color (primary/secondary)
-
-Basic view structure
-Text only, veritical section with title and parapgraphs
-Tables/lists
-Cards
-
-Other
-List/table items (like rows in a table, same entities) must have hover background
-Actions must be buttons
-Navigation must be links
-Diabled-ui-state must be provided for loading states and or unallowed actions
-Contextual actions may appear only if all info for a informed user decision is on screen
-Only one font for text, monosoaced version for code
