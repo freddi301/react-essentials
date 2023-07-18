@@ -1,7 +1,12 @@
 /*
 INSPIRATIONS:
 https://minimals.cc/dashboard/mail
+https://outlook.office.com
 */
+
+// TODO: collapsible items in the left bar
+// TODO: selectable items (middlebar) -> add more actions if selected (add also write)
+// TODO: more stuff from https://outlook.office.com
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { library } from "@fortawesome/fontawesome-svg-core";
@@ -32,67 +37,134 @@ export function Email({
           background ? "ds-background-secondary" : ""
         } ds-padding ds-gap`}
         style={{
-          display: "flex",
-          flexDirection: "row",
           width: "1200px",
-          height: "600px",
+          height: "800px",
           border: "2px dashed gray",
+          display: "grid",
+          gridTemplateColumns: "200px 400px 1fr",
+          gridTemplateRows: "auto auto 1fr auto",
         }}
       >
+        <div
+          style={{ gridRow: "1", gridColumn: "1 / span 3", display: "flex" }}
+          className={`${background ? "ds-background-primary" : ""} ${
+            border ? "ds-border" : ""
+          } ds-padding ds-border-round ds-gap`}
+        >
+          <div style={{ alignSelf: "center" }}>
+            <FontAwesomeIcon icon={"envelope"} size="2x" />
+          </div>
+          <div style={{ flexGrow: 1 }}>
+            <div className={`${weight ? "ds-font-weight-bold" : ""}`}>
+              Me Myself
+            </div>
+            <div className={`${color ? "ds-font-color-secondary" : ""}`}>
+              mr.myself@email.com
+            </div>
+          </div>
+          <div>
+            <Input label="Search" />
+          </div>
+        </div>
+        <div
+          style={{
+            gridRow: "2",
+            gridColumn: "2 / span 2",
+            display: "flex",
+            overflow: "auto",
+          }}
+          className={``}
+        >
+          <Tab
+            icon={<FontAwesomeIcon icon={"inbox"} />}
+            label="Main"
+            isActive
+          />
+          <Tab icon={<FontAwesomeIcon icon={"people-group"} />} label="Forum" />
+          <Tab
+            icon={<FontAwesomeIcon icon={"newspaper"} />}
+            label="Subscriptions"
+          />
+          <div style={{ flexGrow: 1 }} />
+          <Button
+            icon={<FontAwesomeIcon icon={"plus"} />}
+            label="New category"
+          />
+        </div>
         <div
           className={`ds-border-round ${
             background ? "ds-background-primary" : ""
           } ${border ? "ds-border" : ""}`}
-          style={{ width: "200px", flexShrink: 0 }}
+          style={{ gridRow: "2 / span 2", gridColumn: "1" }}
         >
-          <div>
-            <div
-              className="ds-font-color-secondary ds-hoverable ds-gap ds-padding"
-              style={{
-                display: "flex",
-              }}
-            >
-              <div style={{}}>
-                <FontAwesomeIcon icon={"envelope"} />
-              </div>
-              <div style={{ flexGrow: 1 }}>All</div>
-              <div style={{}}>23</div>
+          <Button icon={<FontAwesomeIcon icon={"pen"} />} label="Write" />
+
+          <div
+            className="ds-hoverable ds-gap ds-padding"
+            style={{
+              display: "flex",
+            }}
+          >
+            <div style={{}}>
+              <FontAwesomeIcon icon={"envelope"} />
             </div>
+            <div style={{ flexGrow: 1 }}>All</div>
             <div
-              className="ds-font-color-primary ds-background-active ds-hoverable ds-gap ds-padding"
-              style={{
-                display: "flex",
-              }}
+              style={{}}
+              className={`${background ? "ds-badge" : ""} ds-border-round`}
             >
-              <div style={{}}>
-                <FontAwesomeIcon icon={"inbox"} />
-              </div>
-              <div style={{ flexGrow: 1 }}>Inbox</div>
-              <div style={{}}>4</div>
+              23
             </div>
-            <div
-              className="ds-font-color-secondary ds-hoverable ds-gap ds-padding"
-              style={{
-                display: "flex",
-              }}
-            >
-              <div style={{}}>
-                <FontAwesomeIcon icon={"paper-plane"} />
-              </div>
-              <div style={{ flexGrow: 1 }}>Sent</div>
-              <div style={{}}>2</div>
+          </div>
+          <div
+            className="ds-background-active ds-hoverable ds-gap ds-padding"
+            style={{
+              display: "flex",
+            }}
+          >
+            <div style={{}}>
+              <FontAwesomeIcon icon={"inbox"} />
             </div>
+            <div style={{ flexGrow: 1 }}>Inbox</div>
             <div
-              className="ds-hoverable ds-gap ds-padding ds-background-disabled ds-font-color-disabled"
-              style={{
-                display: "flex",
-              }}
+              style={{}}
+              className={`${background ? "ds-badge" : ""} ds-border-round`}
             >
-              <div style={{}}>
-                <FontAwesomeIcon icon={"archive"} />
-              </div>
-              <div style={{ flexGrow: 1 }}>Archived</div>
-              <div style={{}}>22</div>
+              4
+            </div>
+          </div>
+          <div
+            className="ds-hoverable ds-gap ds-padding"
+            style={{
+              display: "flex",
+            }}
+          >
+            <div style={{}}>
+              <FontAwesomeIcon icon={"paper-plane"} />
+            </div>
+            <div style={{ flexGrow: 1 }}>Sent</div>
+            <div
+              style={{}}
+              className={`${background ? "ds-badge" : ""} ds-border-round`}
+            >
+              2
+            </div>
+          </div>
+          <div
+            className="ds-hoverable ds-gap ds-padding ds-background-disabled ds-font-color-disabled"
+            style={{
+              display: "flex",
+            }}
+          >
+            <div style={{}}>
+              <FontAwesomeIcon icon={"archive"} />
+            </div>
+            <div style={{ flexGrow: 1 }}>Archived</div>
+            <div
+              style={{}}
+              className={`${background ? "ds-badge" : ""} ds-border-round`}
+            >
+              22
             </div>
           </div>
         </div>
@@ -100,7 +172,7 @@ export function Email({
           className={`ds-border-round ${
             background ? "ds-background-primary" : ""
           } ${border ? "ds-border" : ""}`}
-          style={{ width: "400px", flexShrink: 0 }}
+          style={{ gridRow: "3", gridColumn: "2" }}
         >
           {emails.map(({ name, email, date, subject }, index) => {
             return (
@@ -131,7 +203,7 @@ export function Email({
           className={`ds-border-round ${
             background ? "ds-background-primary" : ""
           } ${border ? "ds-border" : ""}`}
-          style={{ flexGrow: 1 }}
+          style={{ gridRow: "3", gridColumn: "3", overflow: "auto" }}
         >
           <div
             style={{ display: "flex" }}
@@ -237,6 +309,14 @@ export function Email({
             Nunc sapien urna, convallis ac molestie ac, lobortis nec elit.
           </div>
         </div>
+        <div
+          style={{ gridRow: "4", gridColumn: "1 / span 3" }}
+          className={`${background ? "ds-background-primary" : ""} ${
+            border ? "ds-border" : ""
+          } ds-border-round ds-padding`}
+        >
+          Total space occupied: 1.5GB
+        </div>
       </div>
     </div>
   );
@@ -253,9 +333,38 @@ function Button({
 }) {
   return (
     <button className="ds-button" disabled={disabled}>
-      {icon && <React.Fragment>{icon}&nbsp;</React.Fragment>}
+      {icon && <React.Fragment>{icon}&nbsp;&nbsp;</React.Fragment>}
       {label}
     </button>
+  );
+}
+
+function Input({ label }: { label: string }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      <label>Search</label>
+      <input className="ds-input" />
+    </div>
+  );
+}
+
+function Tab({
+  icon,
+  label,
+  isActive,
+}: {
+  icon?: React.ReactNode;
+  label: React.ReactNode;
+  isActive?: boolean;
+}) {
+  return (
+    <a
+      href="/"
+      className={`ds-link ds-tab ${isActive ? "ds-background-active" : ""}`}
+    >
+      {icon && <React.Fragment>{icon}&nbsp;&nbsp;</React.Fragment>}
+      {label}
+    </a>
   );
 }
 

@@ -1,5 +1,4 @@
 .ds-theme {
-  --gap: 16px;
   --padding-vertical: 8px;
   --padding-horizontal: 16px;
   --font-weight-regular: 400;
@@ -108,13 +107,18 @@
 }
 
 .ds-gap {
-  gap: var(--gap);
+  column-gap: var(--padding-horizontal);
+  row-gap: var(--padding-vertical);
 }
 
 .ds-button {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
   color: inherit;
-  background-color: var(--primary-background-color);
+  background-color: transparent;
   border: none;
+  outline: none;
   padding: var(--padding-vertical) var(--padding-horizontal);
   appearance: none;
   &:disabled {
@@ -124,4 +128,44 @@
   &:hover {
     background-color: var(--hover-background-color);
   }
+  &:focus {
+    background-color: var(--hover-background-color);
+  }
+}
+
+.ds-input {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  background-color: transparent;
+  outline: none;
+  color: inherit;
+  border: none;
+  padding: 0;
+  border-bottom: 1px solid var(--border-color);
+  &:focus {
+    background-color: var(--hover-background-color);
+  }
+}
+
+.ds-tab {
+  padding: var(--padding-vertical) var(--padding-horizontal);
+  &:hover {
+    background-color: var(--hover-background-color);
+  }
+}
+
+.ds-link {
+  color: inherit;
+  text-decoration: none;
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.ds-badge {
+  background-color: var(--secondary-background-color);
+  padding-left: calc(var(--padding-horizontal) * 0.5);
+  padding-right: calc(var(--padding-horizontal) * 0.5);
+  color: var(--primary-text-color);
 }

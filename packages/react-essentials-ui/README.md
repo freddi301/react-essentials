@@ -4,7 +4,6 @@
 
 - search-engine (google.com)
 - chat (whatsapp.com)
-- email (outlook.com)
 - gallery (youtube.com, instagram.com)
 - e-commerce (amazon.com)
 - dev (github.com)
@@ -16,7 +15,7 @@
 - top bar (usually nav or header for content + searchbar)
   - logo
   - breadcrumbs
-- left bar (section nav or details)
+- right bar (section nav or details)
 - footer (usally more info, links, etc)
 - tabs (usually right below top bar, for switching between sections)
 - cards
