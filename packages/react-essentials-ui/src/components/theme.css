@@ -133,6 +133,10 @@
   }
 }
 
+.ds-border.ds-button {
+  border: 1px solid var(--border-color);
+}
+
 .ds-input {
   font-family: inherit;
   font-size: inherit;

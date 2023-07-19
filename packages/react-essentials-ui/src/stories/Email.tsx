@@ -4,16 +4,12 @@ https://minimals.cc/dashboard/mail
 https://outlook.office.com
 */
 
-// TODO: collapsible items in the left bar
-// TODO: selectable items (middlebar) -> add more actions if selected (add also write)
-// TODO: more stuff from https://outlook.office.com
-
+import React from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { library } from "@fortawesome/fontawesome-svg-core";
 import { fas } from "@fortawesome/free-solid-svg-icons";
 
 import "../components/theme.css";
-import React from "react";
 
 library.add(fas);
 
@@ -30,6 +26,7 @@ export function Email({
   weight: boolean;
   color: boolean;
 }) {
+  const [isOpen, setIsOpen] = React.useState(true);
   return (
     <div className={`ds-theme ds-theme-${theme} ds-theme-defaults`}>
       <div
@@ -37,11 +34,11 @@ export function Email({
           background ? "ds-background-secondary" : ""
         } ds-padding ds-gap`}
         style={{
-          width: "1200px",
+          width: "1400px",
           height: "800px",
           border: "2px dashed gray",
           display: "grid",
-          gridTemplateColumns: "200px 400px 1fr",
+          gridTemplateColumns: "200px 500px 1fr",
           gridTemplateRows: "auto auto 1fr auto",
         }}
       >
@@ -88,6 +85,7 @@ export function Email({
           <div style={{ flexGrow: 1 }} />
           <Button
             icon={<FontAwesomeIcon icon={"plus"} />}
+            className="ds-border-round"
             label="New category"
           />
         </div>
@@ -95,10 +93,20 @@ export function Email({
           className={`ds-border-round ${
             background ? "ds-background-primary" : ""
           } ${border ? "ds-border" : ""}`}
-          style={{ gridRow: "2 / span 2", gridColumn: "1" }}
+          style={{ gridRow: "2", gridColumn: "1", overflow: "auto" }}
         >
-          <Button icon={<FontAwesomeIcon icon={"pen"} />} label="Write" />
-
+          <Button
+            icon={<FontAwesomeIcon icon={"pen"} />}
+            label="Write"
+            style={{ width: "100%" }}
+          />
+        </div>
+        <div
+          className={`ds-border-round ${
+            background ? "ds-background-primary" : ""
+          } ${border ? "ds-border" : ""}`}
+          style={{ gridRow: "3", gridColumn: "1" }}
+        >
           <div
             className="ds-hoverable ds-gap ds-padding"
             style={{
@@ -167,6 +175,32 @@ export function Email({
               22
             </div>
           </div>
+          <Collapsible
+            level={0}
+            isOpen={isOpen}
+            onIsOpenChange={setIsOpen}
+            head={"Category"}
+            body={
+              <React.Fragment>
+                <Collapsible
+                  level={1}
+                  head="Subcategory A"
+                  body={
+                    <Collapsible
+                      level={2}
+                      head="Sub-Item A"
+                      body={null}
+                      isOpen={false}
+                      onIsOpenChange={() => {}}
+                    />
+                  }
+                  isOpen={true}
+                  onIsOpenChange={() => {}}
+                />
+              </React.Fragment>
+            }
+          />
+          <div className="ds-padding ds-hoverable">Other</div>
         </div>
         <div
           className={`ds-border-round ${
@@ -174,27 +208,65 @@ export function Email({
           } ${border ? "ds-border" : ""}`}
           style={{ gridRow: "3", gridColumn: "2" }}
         >
+          <div
+            className={`${border ? "ds-border-bottom" : ""}`}
+            style={{ display: "flex" }}
+          >
+            <div className="ds-padding">
+              <input type="checkbox" checked={true} style={{ margin: "0px" }} />
+            </div>
+            <div style={{ flexGrow: 1 }} />
+            <Button icon={<FontAwesomeIcon icon={"check"} />} label="Read" />
+            <Button
+              icon={<FontAwesomeIcon icon={"check-double"} />}
+              label="Unread"
+            />
+            <Button
+              icon={<FontAwesomeIcon icon={"archive"} />}
+              label="Archive"
+            />
+            <Button icon={<FontAwesomeIcon icon={"trash"} />} label="Delete" />
+          </div>
           {emails.map(({ name, email, date, subject }, index) => {
+            const isSelected = index % 2 === 1;
             return (
               <div
                 key={index}
-                className={`ds-padding ds-hoverable ${
+                className={`ds-padding ds-gap ds-hoverable ${
                   border ? "ds-border-bottom" : ""
-                } ${index === 2 ? "ds-background-hover" : ""}`}
+                } ${isSelected ? "ds-background-active" : ""} ${
+                  index === 3 ? "ds-background-hover" : ""
+                }`}
+                style={{ display: "flex" }}
               >
-                <div className="ds-gap" style={{ display: "flex" }}>
-                  <div className={`${weight ? "ds-font-weight-bold" : ""}`}>
-                    {name}
-                  </div>
-                  <div
-                    className={`${color ? "ds-font-color-secondary" : ""}`}
-                    style={{ flexGrow: 1 }}
-                  >
-                    {email}
-                  </div>
-                  <div>{dateFormatter.format(date)}</div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    style={{ margin: "0px" }}
+                  />
                 </div>
-                <div>{subject}</div>
+                <div style={{ flexGrow: 1 }}>
+                  <div className="ds-gap" style={{ display: "flex" }}>
+                    <div className={`${weight ? "ds-font-weight-bold" : ""}`}>
+                      {name}
+                    </div>
+                    <div
+                      className={`${color ? "ds-font-color-secondary" : ""}`}
+                      style={{ flexGrow: 1 }}
+                    >
+                      {email}
+                    </div>
+                    <div>{dateFormatter.format(date)}</div>
+                  </div>
+                  <div>{subject}</div>
+                </div>
               </div>
             );
           })}
@@ -326,13 +398,21 @@ function Button({
   icon,
   label,
   disabled = false,
+  style,
+  className,
 }: {
   icon?: React.ReactNode;
   label: React.ReactNode;
   disabled?: boolean;
+  style?: React.CSSProperties;
+  className?: string;
 }) {
   return (
-    <button className="ds-button" disabled={disabled}>
+    <button
+      className={`ds-button ${className || ""}`}
+      disabled={disabled}
+      style={style}
+    >
       {icon && <React.Fragment>{icon}&nbsp;&nbsp;</React.Fragment>}
       {label}
     </button>
@@ -368,6 +448,71 @@ function Tab({
   );
 }
 
+function Collapsible({
+  isOpen,
+  onIsOpenChange,
+  head,
+  body,
+  level,
+}: {
+  isOpen: boolean;
+  onIsOpenChange(isOpen: boolean): void;
+  level: number;
+  head: React.ReactNode;
+  body: React.ReactNode;
+}) {
+  const [height, setHeight] = React.useState(0);
+  return (
+    <div>
+      <div
+        style={{
+          display: "flex",
+          paddingLeft: `calc(var(--padding-horizontal) * ${level})`,
+        }}
+        className="ds-hoverable"
+      >
+        <div
+          onClick={() => {
+            onIsOpenChange(!isOpen);
+          }}
+          className="ds-padding"
+          style={{
+            width: "16px",
+            height: "16px",
+            paddingRight: "0px",
+            userSelect: "none",
+          }}
+        >
+          <FontAwesomeIcon icon={isOpen ? "chevron-down" : "chevron-right"} />
+        </div>
+        <div className="ds-padding">{head}</div>
+      </div>
+      <div
+        style={{
+          position: "relative",
+          transition: "0.2s",
+          height: isOpen ? height : "0px",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          ref={(element) => {
+            if (element) {
+              setHeight(element.getBoundingClientRect().height);
+            }
+          }}
+          style={{
+            position: "absolute",
+            width: "100%",
+          }}
+        >
+          {body}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const emails: Array<{
   name: string;
   email: string;
@@ -392,8 +537,20 @@ const emails: Array<{
     subject: "Sand House",
     date: new Date("2003-03-03"),
   },
+  {
+    name: "Bob Pink",
+    email: "bob.pink@email.com",
+    subject: "Dragon House",
+    date: new Date("2003-03-03"),
+  },
 ];
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: "short",
 });
+
+declare global {
+  interface Document {
+    startViewTransition?(callback: () => void): void;
+  }
+}
