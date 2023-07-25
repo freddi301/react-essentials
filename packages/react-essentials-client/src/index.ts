@@ -6,7 +6,7 @@ TODO:
 - check online status (https://tanstack.com/query/latest/docs/react/guides/network-mode)
 */
 
-type Resource<Variables, Data> = {
+type Query<Variables, Data> = {
   resolver(variables: Variables): Promise<Data>;
   resolve(variables: Variables): Promise<Data>;
   getStatus(variables: Variables): Status<Data>;
@@ -89,7 +89,7 @@ type DependentFields<
       [K in BooleanField]: false;
     };
 
-export function createResource<Variables, Data>(
+export function createQuery<Variables, Data>(
   resolver: (variables: Variables) => Promise<Data>,
   {
     /** 0 to disable */
@@ -107,7 +107,7 @@ export function createResource<Variables, Data>(
     revalidateOnConnect?: boolean;
     shouldRetryInMs?(_: { retries: number; error: unknown }): number;
   } = {}
-): Resource<Variables, Data> {
+): Query<Variables, Data> {
   const cache = new Map<Variables, Entry<Variables, Data>>();
   const findEntry = (variables: Variables): Entry<Variables, Data> => {
     for (const [entryVariables, entry] of cache.entries()) {
@@ -146,7 +146,7 @@ export function createResource<Variables, Data>(
       const retryInMs = shouldRetryInMs({ error, retries });
       if (retryInMs > 0) {
         entry.retryTimeoutId = setTimeout(() => {
-          resource.resolve(variables);
+          query.resolve(variables);
         }, retryInMs);
       }
     }
@@ -169,7 +169,7 @@ export function createResource<Variables, Data>(
       }
     }
   };
-  const resource: Resource<Variables, Data> = {
+  const query: Query<Variables, Data> = {
     resolver,
     resolve(variables) {
       const entry = findEntry(variables);
@@ -224,7 +224,7 @@ export function createResource<Variables, Data>(
           entry.revalidateAfterTimeoutId = setTimeout(() => {
             const entry = findEntry(variables);
             if (entry.subscriptions.size > 0) {
-              resource.resolve(variables);
+              query.resolve(variables);
             }
           }, revalidateAfterMs);
         });
@@ -268,39 +268,39 @@ export function createResource<Variables, Data>(
       };
     },
     read(variables) {
-      const status = resource.getStatus(variables);
+      const status = query.getStatus(variables);
       if (status.hasError) throw status.error;
       if (status.isResolving) throw status.promise;
       if (status.hasData) return status.data;
-      throw resource.resolve(variables);
+      throw query.resolve(variables);
     },
     invalidate(criteria) {
       for (const [variables, entry] of cache.entries()) {
         if (criteria(variables)) {
           entry.expectedResolutionId = entry.nextResolutionId;
           if (entry.subscriptions.size > 0) {
-            resource.resolve(variables);
+            query.resolve(variables);
             notify(entry);
           }
         }
       }
     },
     invalidateAll() {
-      resource.invalidate(() => true);
+      query.invalidate(() => true);
     },
     invalidateExact(variables) {
-      resource.invalidate((other) => deepIsEqual(variables, other));
+      query.invalidate((other) => deepIsEqual(variables, other));
     },
     invalidatePartial(variables) {
-      resource.invalidate((other) => partialDeepEqual(variables, other));
+      query.invalidate((other) => partialDeepEqual(variables, other));
     },
     subscribe(variables, listener) {
       const entry = findEntry(variables);
       const subscription = { variables, listener };
       entry.subscriptions.add(subscription);
-      const status = resource.getStatus(variables);
+      const status = query.getStatus(variables);
       if (!status.isValid) {
-        resource.resolve(variables);
+        query.resolve(variables);
       }
       return () => {
         entry.subscriptions.delete(subscription);
@@ -310,14 +310,14 @@ export function createResource<Variables, Data>(
     useStatus(variables, { revalidateOnMount = true } = {}) {
       const structuralVariables = useStructuralValue(variables);
       const [status, setStatus] = React.useState(() =>
-        resource.getStatus(structuralVariables)
+        query.getStatus(structuralVariables)
       );
       React.useEffect(() => {
         if (revalidateOnMount) {
-          resource.resolve(structuralVariables);
+          query.resolve(structuralVariables);
         }
-        return resource.subscribe(structuralVariables, () => {
-          setStatus(resource.getStatus(structuralVariables));
+        return query.subscribe(structuralVariables, () => {
+          setStatus(query.getStatus(structuralVariables));
         });
       }, [revalidateOnMount, structuralVariables]);
       const lastDataRef = React.useRef(
@@ -338,25 +338,25 @@ export function createResource<Variables, Data>(
       const [, forceUpdate] = React.useState(0);
       React.useEffect(() => {
         if (revalidateOnMount) {
-          resource.resolve(structuralVariables);
+          query.resolve(structuralVariables);
         }
-        return resource.subscribe(structuralVariables, () => {
+        return query.subscribe(structuralVariables, () => {
           forceUpdate((count) => count + 1);
         });
       }, [revalidateOnMount, structuralVariables]);
-      const data = resource.read(structuralVariables);
+      const data = query.read(structuralVariables);
       const lastDataRef = React.useRef(data);
       lastDataRef.current = reuseInstances(lastDataRef.current, data) as Data;
       return lastDataRef.current;
     },
   };
   if (revalidateOnFocus) {
-    window.addEventListener("focus", resource.invalidateAll);
+    window.addEventListener("focus", query.invalidateAll);
   }
   if (revalidateOnConnect) {
-    window.addEventListener("online", resource.invalidateAll);
+    window.addEventListener("online", query.invalidateAll);
   }
-  return resource;
+  return query;
 }
 
 type Mutation<Variables, Data> = {

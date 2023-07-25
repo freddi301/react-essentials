@@ -5,7 +5,7 @@ import React from "react";
 import { act, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
-import { createMutation, createResource, reuseInstances } from ".";
+import { createMutation, createQuery, reuseInstances } from ".";
 
 function example() {
   type User = {
@@ -57,35 +57,35 @@ function example() {
     await response.json();
   }
 
-  const userResource = createResource(getUser);
-  const usersResource = createResource(getUsers);
+  const userQuery = createQuery(getUser);
+  const usersQuery = createQuery(getUsers);
   const createUserMutation = createMutation(createUser, {
     onSuccess() {
-      usersResource.invalidateAll();
+      usersQuery.invalidateAll();
     },
   });
   const updateUserMutation = createMutation(updateUser, {
     onSuccess({ variables: { id } }) {
-      userResource.invalidateExact({ id });
-      usersResource.invalidateAll();
+      userQuery.invalidateExact({ id });
+      usersQuery.invalidateAll();
     },
   });
   const deleteUserMutation = createMutation(deleteUser, {
     onSuccess({ variables: { id } }) {
-      userResource.invalidateExact({ id });
-      usersResource.invalidateAll();
+      userQuery.invalidateExact({ id });
+      usersQuery.invalidateAll();
     },
   });
 }
 
-test("resource works with React.Suspense", async () => {
+test("query works with React.Suspense", async () => {
   async function getDouble(x: number) {
     return x * 2;
   }
-  const doubleResource = createResource(getDouble);
+  const doubleQuery = createQuery(getDouble);
   function Component() {
     const [count, setCount] = React.useState(0);
-    const double = doubleResource.useRead(count);
+    const double = doubleQuery.useRead(count);
     return (
       <div>
         <div>Count: {count}</div>
@@ -116,7 +116,7 @@ test("resource works with React.Suspense", async () => {
   expect(screen.queryByText("loading")).not.toBeInTheDocument();
 });
 
-test("resource works with React.Suspense + React.useTransition", async () => {
+test("query works with React.Suspense + React.useTransition", async () => {
   let unBlock: (value: unknown) => void;
   async function getDouble(x: number) {
     await new Promise((resolve) => {
@@ -124,10 +124,10 @@ test("resource works with React.Suspense + React.useTransition", async () => {
     });
     return x * 2;
   }
-  const doubleResource = createResource(getDouble);
+  const doubleQuery = createQuery(getDouble);
   function Component() {
     const [count, setCount] = React.useState(0);
-    const double = doubleResource.useRead(count);
+    const double = doubleQuery.useRead(count);
     const [isPending, startTransition] = React.useTransition();
     console.log("isPending", isPending);
     return (
@@ -171,7 +171,7 @@ test("resource works with React.Suspense + React.useTransition", async () => {
   expect(screen.queryByText("loading")).not.toBeInTheDocument();
 });
 
-test("resources invalidated by a mutation are reloaded", async () => {
+test("querys invalidated by a mutation are reloaded", async () => {
   type Entity = number;
   let entityPersistance: Entity = 0;
   function getEntity(): Promise<Entity> {
@@ -181,14 +181,14 @@ test("resources invalidated by a mutation are reloaded", async () => {
     entityPersistance = entity;
     return Promise.resolve();
   }
-  const entityResource = createResource(getEntity);
+  const entityQuery = createQuery(getEntity);
   const entityUpdateMutation = createMutation(updateEntity, {
     onSuccess({ variables, data }) {
-      entityResource.invalidateAll();
+      entityQuery.invalidateAll();
     },
   });
   function Component() {
-    const entity = entityResource.useRead(undefined);
+    const entity = entityQuery.useRead(undefined);
     return (
       <div>
         <div>Entity: {entity}</div>
@@ -254,14 +254,14 @@ test("structural sharing on read", async () => {
       ],
     };
   }
-  const resource = createResource(getData);
-  const first = await getSuspenseData(() => resource.read(1));
+  const query = createQuery(getData);
+  const first = await getSuspenseData(() => query.read(1));
   expect(first).toStrictEqual(await getData(1));
-  resource.invalidateAll();
-  const second = await getSuspenseData(() => resource.read(1));
+  query.invalidateAll();
+  const second = await getSuspenseData(() => query.read(1));
   expect(first).toStrictEqual(await getData(1));
   expect(second).toBe(first);
-  const third = await getSuspenseData(() => resource.read(2));
+  const third = await getSuspenseData(() => query.read(2));
   expect(third).toStrictEqual(await getData(2));
   expect(third).not.toStrictEqual(first);
   expect(third).not.toBe(first);
