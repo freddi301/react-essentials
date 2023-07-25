@@ -2,7 +2,11 @@
  * @jest-environment jsdom
  */
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitForElementToBeRemoved,
+} from "@testing-library/react";
 import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
 
@@ -540,4 +544,47 @@ test("active links", async () => {
   userEvent.click(screen.getByText(/LinkB/));
   expect(await screen.findByText(/LinkB Active/)).toBeInTheDocument();
   expect(screen.getByText(/LinkA/)).toHaveTextContent("LinkA Inactive");
+});
+
+test("router matches only if validation passes", async () => {
+  const { Router, Link } = createRouter({
+    path: "" as const,
+    Component({ children }) {
+      return (
+        <div>
+          <nav>
+            <Link path="/a/$param" params={{ param: "valid" }}>
+              ValidLink
+            </Link>
+            <Link path="/a/$param" params={{ param: "invalid" }}>
+              InvalidLink
+            </Link>
+          </nav>
+          {children}
+        </div>
+      );
+    },
+    children(parent) {
+      return [
+        route({
+          path: "a/$param" as const,
+          validate({ params }) {
+            return params.param === "valid";
+          },
+          Component({ children }) {
+            return <div>ValidRoute</div>;
+          },
+          children(parent) {
+            return undefined;
+          },
+        }),
+      ];
+    },
+  });
+  render(<Router />);
+  expect(screen.queryByText(/ValidRoute/)).not.toBeInTheDocument();
+  userEvent.click(screen.getByText(/ValidLink/));
+  expect(await screen.findByText(/ValidRoute/)).toBeInTheDocument();
+  userEvent.click(screen.getByText(/InvalidLink/));
+  await waitForElementToBeRemoved(screen.queryByText(/ValidRoute/));
 });

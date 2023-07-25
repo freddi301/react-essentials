@@ -191,7 +191,8 @@ export function createRouter<
     },
     MatchRoute({ path, Component, children }) {
       const { current } = router.useRouterState();
-      // TODO actually use route definitions (aslo to supply search params)
+      // TODO actually use route definitions (also to supply search params)
+      // TODO use validation
       const match = matchPath(path, current);
       if (!match) return null;
       if (!Component) return children;
@@ -322,6 +323,8 @@ function renderRoute({
 }): React.ReactNode {
   const match = matchPath(route.path, path);
   if (!match) return null;
+  if (route.validate && !route.validate({ params: match.params, search: {} }))
+    return null;
   let children = null;
   const mostSpecific = route
     .children?.({ path: route.path, params: match.params })
