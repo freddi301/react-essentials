@@ -4,12 +4,14 @@ import React from "react";
 TODO:
 - let user track mutations more easily (just returning mutation promise now)
 - check online status (https://tanstack.com/query/latest/docs/react/guides/network-mode)
+- useReads useStatuses (for a list of queries)
+- useStatuses (for a list of mutations)
 */
 
 type Query<Variables, Data> = {
   resolver(variables: Variables): Promise<Data>;
   resolve(variables: Variables): Promise<Data>;
-  getStatus(variables: Variables): Status<Data>;
+  getStatus(variables: Variables): QueryStatus<Data>;
   read(variables: Variables): Data;
   invalidate(criteria: (variables: Variables) => boolean): void;
   invalidateAll(): void;
@@ -18,14 +20,14 @@ type Query<Variables, Data> = {
   subscribe(variables: Variables, listener: Listener): Unsubscribe;
   /** does not suspend */
   useStatus(
-    variables: Variables,
+    variables: Variables | null,
     options?: { revalidateOnMount?: boolean }
-  ): Status<Data>;
+  ): QueryStatus<Data>;
   /** does suspend */
-  useRead(
-    variables: Variables,
+  useRead<V extends Variables | null>(
+    variables: V,
     options?: { revalidateOnMount?: boolean }
-  ): Data;
+  ): V extends null ? Data | null : Data;
 };
 
 type Entry<Variables, Data> = {
@@ -66,11 +68,20 @@ type RejectedResolution = {
   endTimestamp: number;
 };
 
-type Status<Data> = {
+type QueryStatus<Data> = {
   isValid: boolean;
 } & DependentFields<"isResolving", "promise", Promise<Data>> &
   DependentFields<"hasData", "data", Data> &
   DependentFields<"hasError", "error", unknown>;
+
+function createDisabledQueryStatus<Data>(): QueryStatus<Data> {
+  return {
+    isValid: false,
+    isResolving: false,
+    hasData: false,
+    hasError: false,
+  };
+}
 
 type Listener = () => void;
 type Unsubscribe = () => void;
@@ -89,7 +100,7 @@ type DependentFields<
       [K in BooleanField]: false;
     };
 
-export function createQuery<Variables, Data>(
+export function createQuery<Data, Variables = undefined>(
   resolver: (variables: Variables) => Promise<Data>,
   {
     /** 0 to disable */
@@ -310,15 +321,21 @@ export function createQuery<Variables, Data>(
     useStatus(variables, { revalidateOnMount = true } = {}) {
       const structuralVariables = useStructuralValue(variables);
       const [status, setStatus] = React.useState(() =>
-        query.getStatus(structuralVariables)
+        structuralVariables !== null
+          ? query.getStatus(structuralVariables)
+          : createDisabledQueryStatus<Data>()
       );
       React.useEffect(() => {
-        if (revalidateOnMount) {
-          query.resolve(structuralVariables);
+        if (structuralVariables !== null) {
+          if (revalidateOnMount) {
+            query.resolve(structuralVariables);
+          }
+          return query.subscribe(structuralVariables, () => {
+            setStatus(query.getStatus(structuralVariables));
+          });
+        } else {
+          setStatus(createDisabledQueryStatus<Data>());
         }
-        return query.subscribe(structuralVariables, () => {
-          setStatus(query.getStatus(structuralVariables));
-        });
       }, [revalidateOnMount, structuralVariables]);
       const lastDataRef = React.useRef(
         status.hasData ? status.data : undefined
@@ -337,14 +354,18 @@ export function createQuery<Variables, Data>(
       const structuralVariables = useStructuralValue(variables);
       const [, forceUpdate] = React.useState(0);
       React.useEffect(() => {
-        if (revalidateOnMount) {
-          query.resolve(structuralVariables);
+        if (structuralVariables !== null) {
+          if (revalidateOnMount) {
+            query.resolve(structuralVariables);
+          }
+
+          return query.subscribe(structuralVariables, () => {
+            forceUpdate((count) => count + 1);
+          });
         }
-        return query.subscribe(structuralVariables, () => {
-          forceUpdate((count) => count + 1);
-        });
       }, [revalidateOnMount, structuralVariables]);
-      const data = query.read(structuralVariables);
+      const data =
+        structuralVariables !== null ? query.read(structuralVariables) : null;
       const lastDataRef = React.useRef(data);
       lastDataRef.current = reuseInstances(lastDataRef.current, data) as Data;
       return lastDataRef.current;
@@ -360,31 +381,169 @@ export function createQuery<Variables, Data>(
 }
 
 type Mutation<Variables, Data> = {
-  mutate(variables: Variables): Promise<Data>;
+  mutate(
+    variables: Variables,
+    options?: {
+      onSuccess?(_: { variables: Variables; data: Data }): void;
+      onError?(_: { variables: Variables; error: unknown }): void;
+    }
+  ): Promise<Data>;
+  useStatus(): SingleMutationStatus<Variables, Data>;
 };
 
-export function createMutation<Variables, Data>(
+type SingleMutationStatus<Variables, Data> = (
+  | {
+      isResolving: false;
+      hasData: false;
+      hasError: false;
+      variables: undefined;
+      data: undefined;
+      error: undefined;
+    }
+  | MutationStatus<Variables, Data>
+) & {
+  mutate(
+    variables: Variables,
+    options?: {
+      onSuccess?(_: { variables: Variables; data: Data }): void;
+      onError?(_: { variables: Variables; error: unknown }): void;
+    }
+  ): Promise<Data>;
+};
+
+type MutationStatus<Variables, Data> =
+  | {
+      isResolving: true;
+      hasData: false;
+      hasError: false;
+      variables: Variables;
+      data: undefined;
+      error: undefined;
+    }
+  | {
+      isResolving: false;
+      hasData: true;
+      hasError: false;
+      variables: Variables;
+      data: Data;
+      error: undefined;
+    }
+  | {
+      isResolving: false;
+      hasData: false;
+      hasError: true;
+      variables: Variables;
+      data: undefined;
+      error: unknown;
+    };
+
+export function createMutation<Data, Variables = undefined>(
   performer: (variables: Variables) => Promise<Data>,
-  {
-    onSuccess,
-    onError,
-  }: {
+  globalOptions: {
     onSuccess?(_: { variables: Variables; data: Data }): void;
     onError?(_: { variables: Variables; error: unknown }): void;
   }
 ): Mutation<Variables, Data> {
-  return {
-    async mutate(variables) {
-      try {
-        const data = await performer(variables);
-        onSuccess?.({ variables, data });
-        return data;
-      } catch (error) {
-        onError?.({ variables, error });
-        throw error;
+  const mutation: Mutation<Variables, Data> = {
+    mutate(variables, localOptions = {}) {
+      const promise = performer(variables);
+      promise.then(
+        (data) => {
+          globalOptions.onSuccess?.({ variables, data });
+          localOptions.onSuccess?.({ variables, data });
+        },
+        (error) => {
+          globalOptions.onError?.({ variables, error });
+          localOptions.onError?.({ variables, error });
+        }
+      );
+      return promise;
+    },
+    useStatus() {
+      type State =
+        | {
+            type: "idle";
+          }
+        | {
+            type: "pending";
+            variables: Variables;
+            promise: Promise<Data>;
+          }
+        | {
+            type: "resolved";
+            variables: Variables;
+            data: Data;
+          }
+        | {
+            type: "rejected";
+            variables: Variables;
+            error: unknown;
+          };
+      const [state, setState] = React.useState<State>({ type: "idle" });
+      const mutate = React.useCallback<
+        SingleMutationStatus<Variables, Data>["mutate"]
+      >((variables, options) => {
+        const promise = mutation.mutate(variables, options);
+        setState({ type: "pending", variables, promise });
+        promise.then(
+          (data) => {
+            setState({ type: "resolved", variables, data });
+          },
+          (error) => {
+            setState({ type: "rejected", variables, error });
+          }
+        );
+        return promise;
+      }, []);
+      switch (state.type) {
+        case "idle": {
+          return {
+            isResolving: false,
+            hasData: false,
+            hasError: false,
+            variables: undefined,
+            data: undefined,
+            error: undefined,
+            mutate,
+          };
+        }
+        case "pending": {
+          return {
+            isResolving: true,
+            hasData: false,
+            hasError: false,
+            variables: state.variables,
+            data: undefined,
+            error: undefined,
+            mutate,
+          };
+        }
+        case "resolved": {
+          return {
+            isResolving: false,
+            hasData: true,
+            hasError: false,
+            variables: state.variables,
+            data: state.data,
+            error: undefined,
+            mutate,
+          };
+        }
+        case "rejected": {
+          return {
+            isResolving: false,
+            hasData: false,
+            hasError: true,
+            variables: state.variables,
+            data: undefined,
+            error: state.error,
+            mutate,
+          };
+        }
       }
     },
   };
+  return mutation;
 }
 
 function deepIsEqual(a: unknown, b: unknown): boolean {
