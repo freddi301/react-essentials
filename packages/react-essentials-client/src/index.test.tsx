@@ -85,7 +85,7 @@ test("query works with React.Suspense", async () => {
   const doubleQuery = createQuery(getDouble);
   function Component() {
     const [count, setCount] = React.useState(0);
-    const double = doubleQuery.useRead(count);
+    const double = doubleQuery.useQueryRead(count);
     return (
       <div>
         <div>Count: {count}</div>
@@ -127,7 +127,7 @@ test("query works with React.Suspense + React.useTransition", async () => {
   const doubleQuery = createQuery(getDouble);
   function Component() {
     const [count, setCount] = React.useState(0);
-    const double = doubleQuery.useRead(count);
+    const double = doubleQuery.useQueryRead(count);
     const [isPending, startTransition] = React.useTransition();
     console.log("isPending", isPending);
     return (
@@ -188,7 +188,7 @@ test("querys invalidated by a mutation are reloaded", async () => {
     },
   });
   function Component() {
-    const entity = entityQuery.useRead(undefined);
+    const entity = entityQuery.useQueryRead(undefined);
     return (
       <div>
         <div>Entity: {entity}</div>

@@ -18,16 +18,18 @@ type Query<Variables, Data> = {
   invalidateExact(variables: Variables): void;
   invalidatePartial(variables: RecursivelyPartial<Variables>): void;
   subscribe(variables: Variables, listener: Listener): Unsubscribe;
-  /** does not suspend */
-  useStatus(
+  useQueryState(
     variables: Variables | null,
     options?: { revalidateOnMount?: boolean }
-  ): QueryStatus<Data>;
-  /** does suspend */
-  useRead<V extends Variables | null>(
+  ): {
+    current: QueryStatus<Data> & { variables: Variables | null };
+    previous: QueryStatus<Data> & { variables: Variables | null };
+  };
+  /** uses suspense */
+  useQueryRead<V extends Variables | null>(
     variables: V,
     options?: { revalidateOnMount?: boolean }
-  ): V extends null ? Data | null : Data;
+  ): V extends null ? undefined : Data;
 };
 
 type Entry<Variables, Data> = {
@@ -68,37 +70,45 @@ type RejectedResolution = {
   endTimestamp: number;
 };
 
-type QueryStatus<Data> = {
-  isValid: boolean;
-} & DependentFields<"isResolving", "promise", Promise<Data>> &
-  DependentFields<"hasData", "data", Data> &
-  DependentFields<"hasError", "error", unknown>;
+type QueryStatus<Data> = { isValid: boolean } & (
+  | { isResolving: true; promise: Promise<Data> }
+  | { isResolving: false; promise: undefined }
+) &
+  (
+    | {
+        hasData: false;
+        data: undefined;
+        hasError: false;
+        error: undefined;
+      }
+    | {
+        hasData: true;
+        data: Data;
+        hasError: false;
+        error: undefined;
+      }
+    | {
+        hasData: false;
+        data: undefined;
+        hasError: true;
+        error: unknown;
+      }
+  );
 
 function createDisabledQueryStatus<Data>(): QueryStatus<Data> {
   return {
     isValid: false,
     isResolving: false,
+    promise: undefined,
     hasData: false,
+    data: undefined,
     hasError: false,
+    error: undefined,
   };
 }
 
 type Listener = () => void;
 type Unsubscribe = () => void;
-
-type DependentFields<
-  BooleanField extends string,
-  Field extends string,
-  Value
-> =
-  | ({
-      [K in BooleanField]: true;
-    } & {
-      [K in Field]: Value;
-    })
-  | {
-      [K in BooleanField]: false;
-    };
 
 export function createQuery<Data, Variables = undefined>(
   resolver: (variables: Variables) => Promise<Data>,
@@ -251,31 +261,59 @@ export function createQuery<Data, Variables = undefined>(
       const lastResolution = resolutions[0];
       const isValid =
         lastResolution?.resolutionId >= entry.expectedResolutionId;
-      const dataResolution = resolutions.find(
-        (resolution) => resolution.status === "resolved"
-      ) as ResolvedResolution<Data> | undefined;
-      const errorResolution = resolutions.find(
-        (resolution) =>
-          resolution.status === "rejected" &&
-          resolution.resolutionId > (dataResolution?.resolutionId ?? -1)
-      ) as RejectedResolution | undefined;
+      const lastSettledResolution = resolutions.find(
+        (resolution) => resolution.status !== "pending"
+      ) as ResolvedResolution<Data> | RejectedResolution | undefined;
       return {
         isValid,
-        ...(lastResolution?.status === "pending"
-          ? { isResolving: true, promise: lastResolution.promise }
-          : { isResolving: false }),
-        ...(dataResolution
-          ? {
-              hasData: true,
-              data: (entry.cachedData = reuseInstances(
-                entry.cachedData,
-                dataResolution.data
-              ) as Data),
+        ...(() => {
+          switch (lastResolution?.status) {
+            case "pending": {
+              return {
+                isResolving: true,
+                promise: lastResolution.promise,
+              };
             }
-          : { hasData: false }),
-        ...(errorResolution
-          ? { hasError: true, error: errorResolution.error }
-          : { hasError: false }),
+            default: {
+              return {
+                isResolving: false,
+                promise: undefined,
+              };
+            }
+          }
+        })(),
+        ...(() => {
+          switch (lastSettledResolution?.status) {
+            case "resolved": {
+              entry.cachedData = reuseInstances(
+                entry.cachedData,
+                lastSettledResolution.data
+              ) as Data;
+              return {
+                hasData: true,
+                data: entry.cachedData,
+                hasError: false,
+                error: undefined,
+              };
+            }
+            case "rejected": {
+              return {
+                hasData: false,
+                data: undefined,
+                hasError: true,
+                error: lastSettledResolution.error,
+              };
+            }
+            default: {
+              return {
+                hasData: false,
+                data: undefined,
+                hasError: false,
+                error: undefined,
+              };
+            }
+          }
+        })(),
       };
     },
     read(variables) {
@@ -318,57 +356,91 @@ export function createQuery<Data, Variables = undefined>(
         garbageCollectEntries();
       };
     },
-    useStatus(variables, { revalidateOnMount = true } = {}) {
-      const structuralVariables = useStructuralValue(variables);
-      const [status, setStatus] = React.useState(() =>
-        structuralVariables !== null
-          ? query.getStatus(structuralVariables)
-          : createDisabledQueryStatus<Data>()
-      );
-      React.useEffect(() => {
-        if (structuralVariables !== null) {
-          if (revalidateOnMount) {
-            query.resolve(structuralVariables);
-          }
-          return query.subscribe(structuralVariables, () => {
-            setStatus(query.getStatus(structuralVariables));
-          });
-        } else {
-          setStatus(createDisabledQueryStatus<Data>());
-        }
-      }, [revalidateOnMount, structuralVariables]);
-      const lastDataRef = React.useRef(
-        status.hasData ? status.data : undefined
-      );
-      if (status.hasData) {
-        const reusedInstances = reuseInstances(
-          lastDataRef.current,
-          status.data
-        ) as Data;
-        lastDataRef.current = reusedInstances;
-        status.data = reusedInstances;
+    useQueryState(variables, { revalidateOnMount = true } = {}) {
+      const variablesRef = React.useRef({
+        previous: null as Variables | null,
+        current: null as Variables | null,
+      });
+      if (!deepIsEqual(variablesRef.current, variables)) {
+        variablesRef.current = {
+          previous: variablesRef.current.current,
+          current: variables,
+        };
       }
-      return status;
+      const currentVariables = variablesRef.current.current;
+      const previousVariables = variablesRef.current.previous;
+      React.useEffect(() => {
+        if (currentVariables !== null && revalidateOnMount) {
+          query.resolve(currentVariables);
+        }
+      }, [revalidateOnMount, currentVariables]);
+      const useStatus = (variables: Variables | null) => {
+        const [status, setStatus] = React.useState(() =>
+          currentVariables !== null
+            ? query.getStatus(currentVariables)
+            : createDisabledQueryStatus<Data>()
+        );
+        React.useEffect(() => {
+          if (variables !== null) {
+            return query.subscribe(variables, () => {
+              setStatus(query.getStatus(variables));
+            });
+          } else {
+            setStatus(createDisabledQueryStatus<Data>());
+          }
+        }, [variables]);
+        const lastDataRef = React.useRef(
+          status.hasData ? status.data : undefined
+        );
+        if (status.hasData) {
+          const reusedInstances = reuseInstances(
+            lastDataRef.current,
+            status.data
+          ) as Data;
+          lastDataRef.current = reusedInstances;
+          status.data = reusedInstances;
+        }
+        return status;
+      };
+      const previousStatus = useStatus(previousVariables);
+      const currentStatus = useStatus(currentVariables);
+      return {
+        previous: {
+          ...previousStatus,
+          variables: previousVariables,
+        },
+        current: {
+          ...currentStatus,
+          variables: currentVariables,
+        },
+      };
     },
-    useRead(variables, { revalidateOnMount = true } = {}) {
-      const structuralVariables = useStructuralValue(variables);
+    useQueryRead(variables, { revalidateOnMount = true } = {}) {
+      const variablesRef = React.useRef(variables);
+      if (!deepIsEqual(variablesRef.current, variables)) {
+        variablesRef.current = variables;
+      }
+      const currentVariables = variablesRef.current;
       const [, forceUpdate] = React.useState(0);
       React.useEffect(() => {
-        if (structuralVariables !== null) {
-          if (revalidateOnMount) {
-            query.resolve(structuralVariables);
-          }
-
-          return query.subscribe(structuralVariables, () => {
+        if (currentVariables !== null) {
+          return query.subscribe(currentVariables, () => {
             forceUpdate((count) => count + 1);
           });
         }
-      }, [revalidateOnMount, structuralVariables]);
+      }, [currentVariables]);
+      React.useEffect(() => {
+        if (currentVariables !== null && revalidateOnMount) {
+          query.resolve(currentVariables);
+        }
+      }, [revalidateOnMount, currentVariables]);
       const data =
-        structuralVariables !== null ? query.read(structuralVariables) : null;
+        currentVariables !== null ? query.read(currentVariables) : undefined;
       const lastDataRef = React.useRef(data);
-      lastDataRef.current = reuseInstances(lastDataRef.current, data) as Data;
-      return lastDataRef.current;
+      lastDataRef.current = reuseInstances(lastDataRef.current, data) as
+        | Data
+        | undefined;
+      return lastDataRef.current as any;
     },
   };
   if (revalidateOnFocus) {
@@ -644,12 +716,4 @@ export function reuseInstances(cached: unknown, incoming: unknown) {
     return reconstructed;
   }
   return incoming;
-}
-
-function useStructuralValue<Value>(value: Value) {
-  const lastValueRef = React.useRef(value);
-  if (!deepIsEqual(lastValueRef.current, value)) {
-    lastValueRef.current = value;
-  }
-  return lastValueRef.current;
 }
