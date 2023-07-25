@@ -28,8 +28,12 @@ type Query<Variables, Data> = {
   /** uses suspense */
   useQueryRead<V extends Variables | null>(
     variables: V,
-    options?: { revalidateOnMount?: boolean }
-  ): V extends null ? undefined : Data;
+    options?: { revalidateOnMount?: boolean; useDeferredValue?: boolean }
+  ): {
+    isPending: boolean;
+    variables: V;
+    data: V extends null ? undefined : Data;
+  };
 };
 
 type Entry<Variables, Data> = {
@@ -185,7 +189,16 @@ export function createQuery<Data, Variables = undefined>(
   };
   const garbageCollectEntries = () => {
     for (const [variables, entry] of cache.entries()) {
-      if (entry.subscriptions.size === 0) {
+      garbageCollectResolutions(entry);
+      if (
+        entry.subscriptions.size === 0 &&
+        Object.values(entry.resolutions).every(
+          (resolution) =>
+            resolution.status === "resolved" &&
+            resolution.endTimestamp - resolution.startTimestamp <=
+              revalidateAfterMs
+        )
+      ) {
         cache.delete(variables);
       }
     }
@@ -318,8 +331,8 @@ export function createQuery<Data, Variables = undefined>(
     },
     read(variables) {
       const status = query.getStatus(variables);
-      if (status.hasError) throw status.error;
       if (status.isResolving) throw status.promise;
+      if (status.hasError) throw status.error;
       if (status.hasData) return status.data;
       throw query.resolve(variables);
     },
@@ -353,7 +366,7 @@ export function createQuery<Data, Variables = undefined>(
       }
       return () => {
         entry.subscriptions.delete(subscription);
-        garbageCollectEntries();
+        setTimeout(garbageCollectEntries, 0);
       };
     },
     useQueryState(variables, { revalidateOnMount = true } = {}) {
@@ -371,6 +384,7 @@ export function createQuery<Data, Variables = undefined>(
       const previousVariables = variablesRef.current.previous;
       React.useEffect(() => {
         if (currentVariables !== null && revalidateOnMount) {
+          // TODO check for unneeded rerenders
           query.resolve(currentVariables);
         }
       }, [revalidateOnMount, currentVariables]);
@@ -415,32 +429,51 @@ export function createQuery<Data, Variables = undefined>(
         },
       };
     },
-    useQueryRead(variables, { revalidateOnMount = true } = {}) {
+    useQueryRead(
+      variables,
+      { revalidateOnMount = true, useDeferredValue = true } = {}
+    ) {
       const variablesRef = React.useRef(variables);
       if (!deepIsEqual(variablesRef.current, variables)) {
         variablesRef.current = variables;
       }
       const currentVariables = variablesRef.current;
+      const deferredVariables = React.useDeferredValue(
+        useDeferredValue ? currentVariables : null
+      );
+      const effectiveVariables = useDeferredValue
+        ? deferredVariables
+        : currentVariables;
       const [, forceUpdate] = React.useState(0);
       React.useEffect(() => {
-        if (currentVariables !== null) {
-          return query.subscribe(currentVariables, () => {
+        if (effectiveVariables !== null) {
+          return query.subscribe(effectiveVariables, () => {
             forceUpdate((count) => count + 1);
           });
         }
-      }, [currentVariables]);
+      }, [effectiveVariables]);
       React.useEffect(() => {
-        if (currentVariables !== null && revalidateOnMount) {
-          query.resolve(currentVariables);
+        if (effectiveVariables !== null && revalidateOnMount) {
+          // TODO check for unneeded rerenders
+          // TODO implement
+          // query.resolve(currentVariables);
         }
-      }, [revalidateOnMount, currentVariables]);
+      }, [revalidateOnMount, effectiveVariables]);
       const data =
-        currentVariables !== null ? query.read(currentVariables) : undefined;
+        effectiveVariables !== null
+          ? query.read(effectiveVariables)
+          : undefined;
       const lastDataRef = React.useRef(data);
       lastDataRef.current = reuseInstances(lastDataRef.current, data) as
         | Data
         | undefined;
-      return lastDataRef.current as any;
+      return {
+        isPending: useDeferredValue
+          ? effectiveVariables !== currentVariables
+          : false,
+        variables: effectiveVariables as any,
+        data: lastDataRef.current as any,
+      };
     },
   };
   if (revalidateOnFocus) {
@@ -559,10 +592,18 @@ export function createMutation<Data, Variables = undefined>(
         setState({ type: "pending", variables, promise });
         promise.then(
           (data) => {
-            setState({ type: "resolved", variables, data });
+            setState((state) => {
+              if (state.type === "pending" && promise === state.promise) {
+                return { type: "resolved", variables, data };
+              } else return state;
+            });
           },
           (error) => {
-            setState({ type: "rejected", variables, error });
+            setState((state) => {
+              if (state.type === "pending" && promise === state.promise) {
+                return { type: "rejected", variables, error };
+              } else return state;
+            });
           }
         );
         return promise;
