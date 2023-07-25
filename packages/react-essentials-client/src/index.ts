@@ -2,6 +2,7 @@ import React from "react";
 
 /*
 TODO:
+- createClient that returns createQuery and createMutation (so user can invalidate all queries at once)
 - let user track mutations more easily (just returning mutation promise now)
 - check online status (https://tanstack.com/query/latest/docs/react/guides/network-mode)
 - useReads useStatuses (for a list of queries)
