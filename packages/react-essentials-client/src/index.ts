@@ -20,12 +20,9 @@ type Query<Variables, Data> = {
   invalidatePartial(variables: RecursivelyPartial<Variables>): void;
   subscribe(variables: Variables, listener: Listener): Unsubscribe;
   useQueryState(
-    variables: Variables | null,
+    variables: Variables,
     options?: { revalidateOnMount?: boolean }
-  ): {
-    current: QueryStatus<Data> & { variables: Variables | null };
-    previous: QueryStatus<Data> & { variables: Variables | null };
-  };
+  ): QueryState<Variables, Data>;
   /** uses suspense */
   useQueryRead<V extends Variables | null>(
     variables: V,
@@ -100,17 +97,12 @@ type QueryStatus<Data> = { isValid: boolean } & (
       }
   );
 
-function createDisabledQueryStatus<Data>(): QueryStatus<Data> {
-  return {
-    isValid: false,
-    isResolving: false,
-    promise: undefined,
-    hasData: false,
-    data: undefined,
-    hasError: false,
-    error: undefined,
-  };
-}
+type QueryState<Variables, Data> = {
+  isPending: boolean;
+  variables: Variables | null;
+  data: Data | undefined;
+  error: unknown | undefined;
+};
 
 type Listener = () => void;
 type Unsubscribe = () => void;
@@ -371,64 +363,85 @@ export function createQuery<Data, Variables = undefined>(
       };
     },
     useQueryState(variables, { revalidateOnMount = true } = {}) {
-      const variablesRef = React.useRef({
-        previous: null as Variables | null,
-        current: null as Variables | null,
-      });
+      const variablesRef = React.useRef(null as Variables | null);
       if (!deepIsEqual(variablesRef.current, variables)) {
-        variablesRef.current = {
-          previous: variablesRef.current.current,
-          current: variables,
-        };
+        variablesRef.current = variables;
       }
-      const currentVariables = variablesRef.current.current;
-      const previousVariables = variablesRef.current.previous;
+      const currentVariables = variablesRef.current;
       React.useEffect(() => {
         if (currentVariables !== null && revalidateOnMount) {
           // TODO check for unneeded rerenders
           query.resolve(currentVariables);
         }
       }, [revalidateOnMount, currentVariables]);
-      const useStatus = (variables: Variables | null) => {
-        const [status, setStatus] = React.useState(() =>
-          currentVariables !== null
-            ? query.getStatus(currentVariables)
-            : createDisabledQueryStatus<Data>()
-        );
-        React.useEffect(() => {
-          if (variables !== null) {
-            return query.subscribe(variables, () => {
-              setStatus(query.getStatus(variables));
-            });
+      const createDisabledState = (): QueryState<Variables, Data> => ({
+        isPending: false,
+        variables: null,
+        data: undefined,
+        error: undefined,
+      });
+      const [state, setState] = React.useState(
+        (): QueryState<Variables, Data> => {
+          if (currentVariables !== null) {
+            const status = query.getStatus(currentVariables);
+            return {
+              isPending: status.isResolving,
+              variables: currentVariables,
+              data: status.hasData ? status.data : undefined,
+              error: status.hasError ? status.error : undefined,
+            };
           } else {
-            setStatus(createDisabledQueryStatus<Data>());
+            return createDisabledState();
           }
-        }, [variables]);
-        const lastDataRef = React.useRef(
-          status.hasData ? status.data : undefined
-        );
-        if (status.hasData) {
-          const reusedInstances = reuseInstances(
-            lastDataRef.current,
-            status.data
-          ) as Data;
-          lastDataRef.current = reusedInstances;
-          status.data = reusedInstances;
         }
-        return status;
-      };
-      const previousStatus = useStatus(previousVariables);
-      const currentStatus = useStatus(currentVariables);
-      return {
-        previous: {
-          ...previousStatus,
-          variables: previousVariables,
-        },
-        current: {
-          ...currentStatus,
-          variables: currentVariables,
-        },
-      };
+      );
+      React.useEffect(() => {
+        const updateState = (
+          state: QueryState<Variables, Data>
+        ): QueryState<Variables, Data> => {
+          const status = query.getStatus(variables);
+          if (status.hasData) {
+            return {
+              isPending: status.isResolving,
+              variables: variables,
+              data: status.data,
+              error: undefined,
+            };
+          }
+          if (status.hasError) {
+            return {
+              isPending: status.isResolving,
+              variables: variables,
+              data: undefined,
+              error: status.error,
+            };
+          }
+          return {
+            isPending: status.isResolving,
+            variables: null,
+            data: state.data,
+            error: state.error,
+          };
+        };
+        if (variables !== null) {
+          setState(updateState);
+          return query.subscribe(variables, () => {
+            setState(updateState);
+          });
+        } else {
+          setState(createDisabledState());
+        }
+      }, [variables]);
+      const lastDataRef = React.useRef(state.data);
+      if (state.data !== undefined) {
+        const reusedInstances = reuseInstances(
+          lastDataRef.current,
+          state.data
+        ) as Data;
+        lastDataRef.current = reusedInstances;
+        state.data = reusedInstances;
+      }
+      return state;
     },
     useQueryRead(
       variables,
