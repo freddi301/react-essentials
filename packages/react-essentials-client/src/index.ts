@@ -448,7 +448,7 @@ export function createQuery<Data, Variables = undefined>(
       React.useEffect(() => {
         if (effectiveVariables !== null) {
           return query.subscribe(effectiveVariables, () => {
-            forceUpdate((count) => count + 1);
+            forceUpdate(Math.random());
           });
         }
       }, [effectiveVariables]);
@@ -476,12 +476,13 @@ export function createQuery<Data, Variables = undefined>(
       };
     },
   };
-  if (revalidateOnFocus) {
-    window.addEventListener("focus", query.invalidateAll);
-  }
-  if (revalidateOnConnect) {
-    window.addEventListener("online", query.invalidateAll);
-  }
+  // TODO re-enable (error: component suspended while responding to synchronesus event)
+  // if (revalidateOnFocus) {
+  //   window.addEventListener("focus", query.invalidateAll);
+  // }
+  // if (revalidateOnConnect) {
+  //   window.addEventListener("online", query.invalidateAll);
+  // }
   return query;
 }
 
@@ -736,7 +737,7 @@ export function reuseInstances(cached: unknown, incoming: unknown) {
   ) {
     let everythingIsEqual = true;
     const reconstructed: Record<string, unknown> = {};
-    for (const [key] of Object.keys(incoming)) {
+    for (const [key] of Object.entries(incoming)) {
       const chosen = reuseInstances(
         (cached as any)[key],
         (incoming as any)[key]
