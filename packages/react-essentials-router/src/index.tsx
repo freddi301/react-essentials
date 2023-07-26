@@ -1,6 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom";
 
+// TODO make children optional
+
 type ParamsFromPathRecursive<
   Params,
   Path extends string

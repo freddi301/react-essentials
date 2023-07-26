@@ -269,3 +269,7 @@ test("structural sharing on read", async () => {
   expect(third).not.toStrictEqual(second);
   expect(third).not.toBe(second);
 });
+
+// TODO: test first render suspension
+// TODO: test error cacth and error boundary
+// TODO: test suspended and not suspended

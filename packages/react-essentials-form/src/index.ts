@@ -76,9 +76,10 @@ export function useField<Value>({
 
 export function fieldProps(fields: Array<Field<any>>) {
   const hasChanged = fields.some((field) => field.hasChanged);
-  const reset = () =>
-    fields.forEach((field) => field.setState(initialFieldState));
   const isValid = fields.every((field) => field.isValid);
+  const reset = () => {
+    fields.forEach((field) => field.setState(initialFieldState));
+  };
   return { hasChanged, isValid, reset };
 }
 
