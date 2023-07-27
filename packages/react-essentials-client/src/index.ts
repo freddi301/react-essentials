@@ -1,4 +1,4 @@
-import React from "react";
+import React, { startTransition } from "react";
 
 /*
 TODO:
@@ -330,6 +330,7 @@ export function createClient(clientOptions?: ClientOptions): Client {
               entry.resolutions[resolutionId] = resolution;
               retryIt(variables);
               garbageCollectResolutions(entry);
+              notify(entry);
             }
           );
           if (revalidateAfterMs > 0) {
@@ -530,7 +531,8 @@ export function createClient(clientOptions?: ClientOptions): Client {
           }, [currentVariables, updateState]);
           React.useEffect(() => {
             if (currentVariables !== null && revalidateOnMount) {
-              query.resolve(currentVariables);
+              // TODO fix
+              // query.resolve(currentVariables);
             }
           }, [revalidateOnMount, currentVariables]);
           const lastDataRef = React.useRef(state.data);
