@@ -131,7 +131,9 @@ test("query works with React.Suspense + React.useTransition", async () => {
   const doubleQuery = createQuery(getDouble);
   function Component() {
     const [count, setCount] = React.useState(0);
-    const doubleQueryState = doubleQuery.useQueryState(count);
+    const doubleQueryState = doubleQuery.useQueryState(count, {
+      revalidateOnMount: false,
+    });
     const [isPending, startTransition] = React.useTransition();
     return (
       <div>

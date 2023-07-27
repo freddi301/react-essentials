@@ -530,9 +530,7 @@ export function createClient(clientOptions?: ClientOptions): Client {
           }, [currentVariables, updateState]);
           React.useEffect(() => {
             if (currentVariables !== null && revalidateOnMount) {
-              // TODO check for unneeded rerenders
-              // TODO implement
-              // query.resolve(currentVariables);
+              query.resolve(currentVariables);
             }
           }, [revalidateOnMount, currentVariables]);
           const lastDataRef = React.useRef(state.data);
