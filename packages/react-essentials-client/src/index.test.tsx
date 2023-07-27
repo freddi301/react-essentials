@@ -5,7 +5,7 @@ import React from "react";
 import { act, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
-import { createMutation, createQuery, reuseInstances } from ".";
+import { createClient, reuseInstances } from ".";
 
 function example() {
   type User = {
@@ -56,7 +56,7 @@ function example() {
     });
     await response.json();
   }
-
+  const { createQuery, createMutation } = createClient();
   const userQuery = createQuery(getUser);
   const usersQuery = createQuery(getUsers);
   const createUserMutation = createMutation(createUser, {
@@ -82,12 +82,13 @@ test("query works with React.Suspense", async () => {
   async function getDouble(x: number) {
     return x * 2;
   }
+  const { createQuery } = createClient();
   const doubleQuery = createQuery(getDouble);
   function Component() {
     const [count, setCount] = React.useState(0);
-    const double = doubleQuery.useQueryRead(count, {
-      useDeferredValue: false,
-    }).data;
+    const doubleQueryState = doubleQuery.useQueryState(count, {
+      handleLoading: false,
+    });
     return (
       <div>
         <div>Count: {count}</div>
@@ -98,7 +99,7 @@ test("query works with React.Suspense", async () => {
         >
           Increase
         </button>
-        <div>Double: {double}</div>
+        <div>Double: {doubleQueryState.data}</div>
       </div>
     );
   }
@@ -126,10 +127,11 @@ test("query works with React.Suspense + React.useTransition", async () => {
     });
     return x * 2;
   }
+  const { createQuery, createMutation } = createClient();
   const doubleQuery = createQuery(getDouble);
   function Component() {
     const [count, setCount] = React.useState(0);
-    const double = doubleQuery.useQueryRead(count).data;
+    const doubleQueryState = doubleQuery.useQueryState(count);
     const [isPending, startTransition] = React.useTransition();
     return (
       <div>
@@ -144,7 +146,7 @@ test("query works with React.Suspense + React.useTransition", async () => {
         >
           Increase
         </button>
-        <div>Double: {double}</div>
+        <div>Double: {doubleQueryState.data}</div>
       </div>
     );
   }
@@ -182,6 +184,7 @@ test("querys invalidated by a mutation are reloaded", async () => {
     entityPersistance = entity;
     return Promise.resolve();
   }
+  const { createQuery, createMutation } = createClient();
   const entityQuery = createQuery(getEntity);
   const entityUpdateMutation = createMutation(updateEntity, {
     onSuccess({ variables, data }) {
@@ -189,13 +192,15 @@ test("querys invalidated by a mutation are reloaded", async () => {
     },
   });
   function Component() {
-    const entity = entityQuery.useQueryRead(undefined).data;
+    const entityQueryState = entityQuery.useQueryState(undefined);
     return (
       <div>
-        <div>Entity: {entity}</div>
+        <div>Entity: {entityQueryState.data}</div>
         <button
           onClick={() => {
-            entityUpdateMutation.mutate(entity + 1);
+            if (entityQueryState.data !== undefined) {
+              entityUpdateMutation.mutate(entityQueryState.data + 1);
+            }
           }}
         >
           update entity
@@ -255,6 +260,7 @@ test("structural sharing on read", async () => {
       ],
     };
   }
+  const { createQuery } = createClient();
   const query = createQuery(getData);
   const first = await getSuspenseData(() => query.read(1));
   expect(first).toStrictEqual(await getData(1));
