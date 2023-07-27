@@ -205,7 +205,12 @@ export function createClient(clientOptions?: ClientOptions): Client {
       resolver: (variables: Variables) => Promise<Data>,
       queryOptions?: QueryOptions & QueryHookOptions
     ): Query<Variables, Data> {
-      const { shouldRetryInMs, revalidateAfterMs, revalidateOnFocus } = {
+      const {
+        shouldRetryInMs,
+        revalidateAfterMs,
+        revalidateOnFocus,
+        revalidateOnConnect,
+      } = {
         ...defaultQueryOptions,
         ...defaultQueryHookOptions,
         ...clientOptions?.query,
@@ -457,18 +462,29 @@ export function createClient(clientOptions?: ClientOptions): Client {
             ...queryOptions,
             ...hookOptions,
           };
-          // const useDeferredValue = suspendData && handleLoading;
           const variablesRef = React.useRef(variables);
           if (!deepIsEqual(variablesRef.current, variables)) {
             variablesRef.current = variables;
           }
           const currentVariables = variablesRef.current;
-          // const deferredVariables = React.useDeferredValue(
-          //   useDeferredValue ? currentVariables : null
-          // );
-          // const effectiveVariables = useDeferredValue
-          //   ? deferredVariables
-          //   : currentVariables;
+          const useDeferredValue = suspendData && handleLoading;
+          const deferredVariables = React.useDeferredValue(
+            useDeferredValue ? currentVariables : null
+          );
+          if (deferredVariables !== null && suspendData) {
+            query.read(deferredVariables);
+          }
+          if (suspendData) {
+            if (handleLoading) {
+              if (deferredVariables !== null) {
+                query.read(deferredVariables);
+              }
+            } else {
+              if (currentVariables !== null) {
+                query.read(currentVariables);
+              }
+            }
+          }
           const updateState = React.useCallback(
             (variables: Variables | null) =>
               (
