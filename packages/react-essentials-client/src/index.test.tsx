@@ -86,9 +86,7 @@ test("query works with React.Suspense", async () => {
   const doubleQuery = createQuery(getDouble);
   function Component() {
     const [count, setCount] = React.useState(0);
-    const doubleQueryState = doubleQuery.useQueryState(count, {
-      handleLoading: false,
-    });
+    const doubleQueryState = doubleQuery.useQueryState(count);
     return (
       <div>
         <div>Count: {count}</div>
@@ -127,7 +125,7 @@ test("query works with React.Suspense + React.useTransition", async () => {
     });
     return x * 2;
   }
-  const { createQuery, createMutation } = createClient();
+  const { createQuery } = createClient();
   const doubleQuery = createQuery(getDouble);
   function Component() {
     const [count, setCount] = React.useState(0);
@@ -226,7 +224,11 @@ async function getSuspenseData<Data>(callback: () => Data): Promise<Data> {
   try {
     return callback();
   } catch (error) {
-    return (await error) as Data;
+    if (error instanceof Promise) {
+      await error;
+      return callback();
+    }
+    throw error;
   }
 }
 
