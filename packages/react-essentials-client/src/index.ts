@@ -259,10 +259,10 @@ export function createClient(clientOptions?: ClientOptions): Client {
           (a, b) => b.resolutionId - a.resolutionId
         );
         let startDeleting = false;
-        for (let i = 1; i < resolutions.length; i++) {
+        for (let i = 0; i < resolutions.length; i++) {
           const resolution = resolutions[i];
-          if (resolution.status === "resolved") startDeleting = true;
           if (startDeleting) delete entry.resolutions[resolution.resolutionId];
+          if (resolution.status !== "pending") startDeleting = true;
         }
       };
       const garbageCollectEntries = () => {
@@ -272,9 +272,8 @@ export function createClient(clientOptions?: ClientOptions): Client {
             entry.subscriptions.size === 0 &&
             Object.values(entry.resolutions).every(
               (resolution) =>
-                resolution.status === "resolved" &&
-                resolution.endTimestamp - resolution.startTimestamp <=
-                  revalidateAfterMs
+                resolution.status !== "pending" &&
+                Date.now() - resolution.endTimestamp >= revalidateAfterMs
             )
           ) {
             cache.delete(variables);
@@ -311,6 +310,7 @@ export function createClient(clientOptions?: ClientOptions): Client {
                 clearTimeout(entry.retryTimeoutId);
               }
               garbageCollectResolutions(entry);
+              notify(entry);
             },
             (error) => {
               const endTimestamp = Date.now();
@@ -342,6 +342,7 @@ export function createClient(clientOptions?: ClientOptions): Client {
             });
           }
           garbageCollectResolutions(entry);
+          notify(entry);
           return promise;
         },
         getState(variables) {
@@ -447,87 +448,6 @@ export function createClient(clientOptions?: ClientOptions): Client {
             setTimeout(garbageCollectEntries, 0);
           };
         },
-        // useQueryState(variables, { revalidateOnMount = true } = {}) {
-        //   const variablesRef = React.useRef(null as Variables | null);
-        //   if (!deepIsEqual(variablesRef.current, variables)) {
-        //     variablesRef.current = variables;
-        //   }
-        //   const currentVariables = variablesRef.current;
-        //   React.useEffect(() => {
-        //     if (currentVariables !== null && revalidateOnMount) {
-        //       // TODO check for unneeded rerenders
-        //       query.resolve(currentVariables);
-        //     }
-        //   }, [revalidateOnMount, currentVariables]);
-        //   const createDisabledState = (): QueryState<Variables, Data> => ({
-        //     isPending: false,
-        //     variables: null,
-        //     data: undefined,
-        //     error: undefined,
-        //   });
-        //   const [state, setState] = React.useState(
-        //     (): QueryState<Variables, Data> => {
-        //       if (currentVariables !== null) {
-        //         const status = query.getState(currentVariables);
-        //         return {
-        //           isPending: status.isResolving,
-        //           variables: currentVariables,
-        //           data: status.hasData ? status.data : undefined,
-        //           error: status.hasError ? status.error : undefined,
-        //         };
-        //       } else {
-        //         return createDisabledState();
-        //       }
-        //     }
-        //   );
-        //   React.useEffect(() => {
-        //     const updateState = (
-        //       state: QueryState<Variables, Data>
-        //     ): QueryState<Variables, Data> => {
-        //       const status = query.getState(variables);
-        //       if (status.hasData) {
-        //         return {
-        //           isPending: status.isResolving,
-        //           variables: variables,
-        //           data: status.data,
-        //           error: undefined,
-        //         };
-        //       }
-        //       if (status.hasError) {
-        //         return {
-        //           isPending: status.isResolving,
-        //           variables: variables,
-        //           data: undefined,
-        //           error: status.error,
-        //         };
-        //       }
-        //       return {
-        //         isPending: status.isResolving,
-        //         variables: null,
-        //         data: state.data,
-        //         error: state.error,
-        //       };
-        //     };
-        //     if (variables !== null) {
-        //       setState(updateState);
-        //       return query.subscribe(variables, () => {
-        //         setState(updateState);
-        //       });
-        //     } else {
-        //       setState(createDisabledState());
-        //     }
-        //   }, [variables]);
-        //   const lastDataRef = React.useRef(state.data);
-        //   if (state.data !== undefined) {
-        //     const reusedInstances = reuseInstances(
-        //       lastDataRef.current,
-        //       state.data
-        //     ) as Data;
-        //     lastDataRef.current = reusedInstances;
-        //     state.data = reusedInstances;
-        //   }
-        //   return state;
-        // },
         useQueryState(variables, hookOptions) {
           // TODO implement all hook options
           const { handleLoading, suspendData, revalidateOnMount } = {
@@ -537,49 +457,74 @@ export function createClient(clientOptions?: ClientOptions): Client {
             ...queryOptions,
             ...hookOptions,
           };
-          const useDeferredValue = suspendData && handleLoading;
+          // const useDeferredValue = suspendData && handleLoading;
           const variablesRef = React.useRef(variables);
           if (!deepIsEqual(variablesRef.current, variables)) {
             variablesRef.current = variables;
           }
           const currentVariables = variablesRef.current;
-          const deferredVariables = React.useDeferredValue(
-            useDeferredValue ? currentVariables : null
+          // const deferredVariables = React.useDeferredValue(
+          //   useDeferredValue ? currentVariables : null
+          // );
+          // const effectiveVariables = useDeferredValue
+          //   ? deferredVariables
+          //   : currentVariables;
+          const updateState = React.useCallback(
+            (variables: Variables | null) =>
+              (
+                state: QueryHookState<Variables, Data>
+              ): QueryHookState<Variables, Data> => {
+                if (variables === null) {
+                  return {
+                    isLoading: false,
+                    variables: null,
+                    data: undefined,
+                    error: undefined,
+                  };
+                } else {
+                  const queryState = query.getState(variables);
+                  return {
+                    isLoading: queryState.isResolving,
+                    variables:
+                      queryState.hasData || queryState.hasError
+                        ? variables
+                        : state.variables,
+                    data: queryState.hasData ? queryState.data : state.data,
+                    error: queryState.hasError ? queryState.error : state.error,
+                  };
+                }
+              },
+            []
           );
-          const effectiveVariables = useDeferredValue
-            ? deferredVariables
-            : currentVariables;
-          const [, forceUpdate] = React.useState(0);
+          const [state, setState] = React.useState(() =>
+            updateState(currentVariables)({
+              isLoading: false,
+              variables: null,
+              data: undefined,
+              error: undefined,
+            })
+          );
           React.useEffect(() => {
-            if (effectiveVariables !== null) {
-              return query.subscribe(effectiveVariables, () => {
-                forceUpdate(Math.random());
+            setState(updateState(currentVariables));
+            if (currentVariables !== null) {
+              return query.subscribe(currentVariables, () => {
+                setState(updateState(currentVariables));
               });
             }
-          }, [effectiveVariables]);
+          }, [currentVariables, updateState]);
           React.useEffect(() => {
-            if (effectiveVariables !== null && revalidateOnMount) {
+            if (currentVariables !== null && revalidateOnMount) {
               // TODO check for unneeded rerenders
               // TODO implement
               // query.resolve(currentVariables);
             }
-          }, [revalidateOnMount, effectiveVariables]);
-          const data =
-            effectiveVariables !== null
-              ? query.read(effectiveVariables)
-              : undefined;
-          const lastDataRef = React.useRef(data);
-          lastDataRef.current = reuseInstances(lastDataRef.current, data) as
-            | Data
-            | undefined;
-          return {
-            isLoading: useDeferredValue
-              ? effectiveVariables !== currentVariables
-              : false,
-            variables: effectiveVariables as any,
-            data: lastDataRef.current as any,
-            error: null, // TODO
-          };
+          }, [revalidateOnMount, currentVariables]);
+          const lastDataRef = React.useRef(state.data);
+          lastDataRef.current = reuseInstances(
+            lastDataRef.current,
+            state.data
+          ) as Data | undefined;
+          return { ...state, data: lastDataRef.current };
         },
       };
       // TODO re-enable (error: component suspended while responding to synchronesus event)
