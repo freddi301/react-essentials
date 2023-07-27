@@ -582,10 +582,10 @@ export function createClient(clientOptions?: ClientOptions): Client {
           };
         },
       };
-      if (revalidateOnFocus) {
-        window.addEventListener("focus", query.invalidateAll);
-      }
       // TODO re-enable (error: component suspended while responding to synchronesus event)
+      // if (revalidateOnFocus) {
+      //   window.addEventListener("focus", query.invalidateAll);
+      // }
       // if (revalidateOnConnect) {
       //   window.addEventListener("online", query.invalidateAll);
       // }
