@@ -2,10 +2,16 @@ import React from "react";
 
 // TODO: reenable suspense
 // TODO: see index_todo file
+// TODO: check online status (https://tanstack.com/query/latest/docs/react/guides/network-mode)
+// TODO: useQueryStates (for a list of queries)
+// TODO:  useMutationStates (for a list of mutations)
+// TODO: suspend (throw promise) on useMutationState
 
 type QueryOptions = {
   revalidateOnFocus: boolean;
   revalidateOnConnect: boolean;
+  //   /** 0 to disable */
+  revalidateAfterMs: number;
 };
 type QueryHookOptions = {
   revalidateOnMount: boolean;
@@ -15,6 +21,7 @@ type QueryHookOptions = {
 const defaultQueryOptions: QueryOptions = {
   revalidateOnFocus: true,
   revalidateOnConnect: true,
+  revalidateAfterMs: 5 * 60 * 1000,
 };
 const defaultQueryHookOptions: QueryHookOptions = {
   revalidateOnMount: true,
@@ -29,7 +36,7 @@ export function createClient(clientOptions?: {
     resolver: (variables: Variables) => Promise<Data>,
     queryOptions?: Partial<QueryOptions>
   ) {
-    const { revalidateOnFocus, revalidateOnConnect } = {
+    const { revalidateOnFocus, revalidateOnConnect, revalidateAfterMs } = {
       ...defaultQueryOptions,
       ...clientOptions?.queryOptions,
       ...queryOptions,
@@ -119,6 +126,7 @@ export function createClient(clientOptions?: {
             startTimestamp,
             endTimestamp: Date.now(),
           };
+          garbageCollectResolutions(entry);
           notify(entry);
         },
         (error) => {
@@ -128,9 +136,11 @@ export function createClient(clientOptions?: {
             startTimestamp,
             endTimestamp: Date.now(),
           };
+          garbageCollectResolutions(entry);
           notify(entry);
         }
       );
+      garbageCollectResolutions(entry);
       notify(entry);
       return promise;
     }
@@ -165,14 +175,28 @@ export function createClient(clientOptions?: {
       window.addEventListener("online", invalidateAll);
     }
 
-    function getState(variables: Variables) {
-      const entry = getEntry(variables);
-      const resolutions = Object.entries(entry.resolutions)
+    function garbageCollectResolutions(entry: Entry) {
+      const resolutions = getSortedResolutions(entry);
+      let startDeleting = false;
+      for (let i = 0; i < resolutions.length; i++) {
+        const resolution = resolutions[i]!;
+        if (startDeleting) delete entry.resolutions[Number(resolution.id)];
+        if (resolution.type !== "pending") startDeleting = true;
+      }
+    }
+
+    function getSortedResolutions(entry: Entry) {
+      return Object.entries(entry.resolutions)
         .map(([resolutionId, resolution]) => ({
           id: resolutionId,
           ...resolution,
         }))
         .sort((a, b) => Number(b.id) - Number(a.id));
+    }
+
+    function getState(variables: Variables) {
+      const entry = getEntry(variables);
+      const resolutions = getSortedResolutions(entry);
       const latestResolution = resolutions[0];
       const isLoading = latestResolution?.type === "pending";
       const promise =
@@ -193,7 +217,13 @@ export function createClient(clientOptions?: {
           ? latestSettledResolution.error
           : undefined;
       const isValid =
-        Number(latestResolution?.id) >= entry.expectedResolutionId;
+        Number(latestResolution?.id) >= entry.expectedResolutionId &&
+        (latestSettledResolution
+          ? revalidateAfterMs > 0 &&
+            latestSettledResolution.type !== "pending" &&
+            Date.now() - latestSettledResolution.endTimestamp <
+              revalidateAfterMs
+          : true);
       return {
         isValid,
         isLoading,
