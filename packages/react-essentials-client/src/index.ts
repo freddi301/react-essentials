@@ -244,6 +244,7 @@ export function createClient(clientOptions?: {
 
     type QueryHookState = {
       isLoading: boolean;
+      promise: Promise<Data> | undefined;
       variables: Variables | null;
       data: Data | undefined;
       error: unknown;
@@ -251,6 +252,7 @@ export function createClient(clientOptions?: {
     };
     const disabledQueryHookState: QueryHookState = {
       isLoading: false,
+      promise: undefined,
       variables: null,
       data: undefined,
       error: undefined,
@@ -278,6 +280,7 @@ export function createClient(clientOptions?: {
             const queryState = getState(variables);
             const newHookState: QueryHookState = {
               isLoading: queryState.isLoading,
+              promise: queryState.promise,
               variables:
                 queryState.data || queryState.error
                   ? variables
@@ -293,30 +296,36 @@ export function createClient(clientOptions?: {
       const [hookState, setHookState] = React.useState<QueryHookState>(() =>
         updateState(currentVariables)(disabledQueryHookState)
       );
+      const [isPending, startTransition] = React.useTransition();
       React.useEffect(() => {
-        setHookState(updateState(currentVariables));
-        if (currentVariables !== null) {
-          return subscribe(currentVariables, () => {
+        const doIt = () => {
+          startTransition(() => {
             setHookState(updateState(currentVariables));
           });
+        };
+        doIt();
+        if (currentVariables !== null) {
+          return subscribe(currentVariables, doIt);
         }
       }, [currentVariables, updateState]);
-      React.useEffect(() => {
-        if (currentVariables !== null && revalidateOnMount) {
-          resolve(currentVariables);
-        }
-      }, [revalidateOnMount, currentVariables]);
-      React.useEffect(() => {
-        if (currentVariables !== null && !hookState.isValid) {
-          resolve(currentVariables);
-        }
-      });
+      // TODO: fix unecessary rerenders
+      // React.useEffect(() => {
+      //   if (currentVariables !== null && revalidateOnMount) {
+      //     invalidateExact(currentVariables);
+      //   }
+      // }, [currentVariables, revalidateOnMount]);
       const lastDataRef = React.useRef(hookState.data);
       lastDataRef.current = reuseInstances(
         lastDataRef.current,
         hookState.data
       ) as Data | undefined;
-      if (!handleError && hookState.error) throw hookState.error;
+      if (!handleError && hookState.error) {
+        throw hookState.error;
+      }
+      if (!isPending && hookState.isLoading) {
+        throw hookState.promise;
+      }
+      // TODO: suspend on forst render if loading
       return { ...hookState, data: lastDataRef.current };
     }
     return {
