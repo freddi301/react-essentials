@@ -1,10 +1,9 @@
 import React from "react";
 
-// TODO: reenable suspense
 // TODO: see index_todo file
 // TODO: check online status (https://tanstack.com/query/latest/docs/react/guides/network-mode)
 // TODO: useQueryStates (for a list of queries)
-// TODO:  useMutationStates (for a list of mutations)
+// TODO: useMutationStates (for a list of mutations)
 // TODO: suspend (throw promise) on useMutationState
 
 type QueryOptions = {
@@ -216,14 +215,15 @@ export function createClient(clientOptions?: {
         latestSettledResolution?.type === "rejected"
           ? latestSettledResolution.error
           : undefined;
+      const isFresh =
+        revalidateAfterMs > 0 &&
+        latestSettledResolution &&
+        latestSettledResolution?.type !== "pending"
+          ? Date.now() - latestSettledResolution.endTimestamp <
+            revalidateAfterMs
+          : true;
       const isValid =
-        Number(latestResolution?.id) >= entry.expectedResolutionId &&
-        (latestSettledResolution
-          ? revalidateAfterMs > 0 &&
-            latestSettledResolution.type !== "pending" &&
-            Date.now() - latestSettledResolution.endTimestamp <
-              revalidateAfterMs
-          : true);
+        Number(latestResolution?.id) >= entry.expectedResolutionId && isFresh;
       return {
         isValid,
         isLoading,
@@ -297,6 +297,16 @@ export function createClient(clientOptions?: {
         updateState(currentVariables)(disabledQueryHookState)
       );
       const [isPending, startTransition] = React.useTransition();
+      const deferredVariables = React.useDeferredValue(currentVariables);
+      if (deferredVariables !== null) {
+        const state = getState(deferredVariables);
+        if (!state.isValid) {
+          throw resolve(deferredVariables);
+        }
+        if (!isPending && state.isLoading) {
+          throw state.promise;
+        }
+      }
       React.useEffect(() => {
         const doIt = () => {
           startTransition(() => {
@@ -322,10 +332,6 @@ export function createClient(clientOptions?: {
       if (!handleError && hookState.error) {
         throw hookState.error;
       }
-      if (!isPending && hookState.isLoading) {
-        throw hookState.promise;
-      }
-      // TODO: suspend on forst render if loading
       return { ...hookState, data: lastDataRef.current };
     }
     return {
