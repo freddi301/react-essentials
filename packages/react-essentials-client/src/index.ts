@@ -1,6 +1,7 @@
 import React from "react";
 
 // TODO: see index_todo file
+// TODO: reneable suspense
 // TODO: check online status (https://tanstack.com/query/latest/docs/react/guides/network-mode)
 // TODO: useQueryStates (for a list of queries)
 // TODO: useMutationStates (for a list of mutations)
@@ -243,20 +244,16 @@ export function createClient(clientOptions?: {
     }
 
     type QueryHookState = {
+      isValid: boolean;
       isLoading: boolean;
-      promise: Promise<Data> | undefined;
-      variables: Variables | null;
       data: Data | undefined;
       error: unknown;
-      isValid: boolean;
     };
     const disabledQueryHookState: QueryHookState = {
+      isValid: false,
       isLoading: false,
-      promise: undefined,
-      variables: null,
       data: undefined,
       error: undefined,
-      isValid: false,
     };
 
     function useQueryState(
@@ -273,57 +270,34 @@ export function createClient(clientOptions?: {
         variablesRef.current = variables;
       }
       const currentVariables = variablesRef.current;
-      const updateState = React.useCallback(
-        (variables: Variables | null) =>
-          (hookState: QueryHookState): QueryHookState => {
-            if (variables === null) return disabledQueryHookState;
-            const queryState = getState(variables);
-            const newHookState: QueryHookState = {
-              isLoading: queryState.isLoading,
-              promise: queryState.promise,
-              variables:
-                queryState.data || queryState.error
-                  ? variables
-                  : hookState.variables,
-              data: queryState.data ?? hookState.data,
-              error: queryState.error ?? hookState.error,
-              isValid: queryState.isValid,
-            };
-            return reuseInstances(hookState, newHookState) as QueryHookState;
-          },
-        []
+      const [hookState, setHookState] = React.useState<QueryHookState>(
+        disabledQueryHookState
       );
-      const [hookState, setHookState] = React.useState<QueryHookState>(() =>
-        updateState(currentVariables)(disabledQueryHookState)
-      );
-      const [isPending, startTransition] = React.useTransition();
-      const deferredVariables = React.useDeferredValue(currentVariables);
-      if (deferredVariables !== null) {
-        const state = getState(deferredVariables);
-        if (!state.isValid) {
-          throw resolve(deferredVariables);
-        }
-        if (!isPending && state.isLoading) {
-          throw state.promise;
-        }
-      }
       React.useEffect(() => {
+        if (currentVariables !== null && revalidateOnMount) {
+          invalidateExact(currentVariables);
+        }
         const doIt = () => {
-          startTransition(() => {
-            setHookState(updateState(currentVariables));
-          });
+          if (currentVariables === null) {
+            setHookState(disabledQueryHookState);
+          } else {
+            const queryState = getState(currentVariables);
+            setHookState((hookState): QueryHookState => {
+              const newHookState: QueryHookState = {
+                isValid: queryState.isValid,
+                isLoading: queryState.isLoading,
+                data: queryState.data,
+                error: queryState.error,
+              };
+              return reuseInstances(hookState, newHookState) as QueryHookState;
+            });
+          }
         };
         doIt();
         if (currentVariables !== null) {
           return subscribe(currentVariables, doIt);
         }
-      }, [currentVariables, updateState]);
-      // TODO: fix unecessary rerenders
-      // React.useEffect(() => {
-      //   if (currentVariables !== null && revalidateOnMount) {
-      //     invalidateExact(currentVariables);
-      //   }
-      // }, [currentVariables, revalidateOnMount]);
+      }, [currentVariables, revalidateOnMount]);
       const lastDataRef = React.useRef(hookState.data);
       lastDataRef.current = reuseInstances(
         lastDataRef.current,
@@ -334,6 +308,7 @@ export function createClient(clientOptions?: {
       }
       return { ...hookState, data: lastDataRef.current };
     }
+
     return {
       resolver,
       resolve,
