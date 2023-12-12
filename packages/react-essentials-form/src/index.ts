@@ -65,6 +65,7 @@ export function useField<Value>({
   }, []);
   return {
     ...state,
+    initialValue,
     value,
     isValid,
     isRequired,
