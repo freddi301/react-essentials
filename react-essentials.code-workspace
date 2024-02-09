@@ -1,9 +1,6 @@
 {
   "folders": [
     {
-      "path": "packages/react-essentials-form"
-    },
-    {
       "path": "packages/react-essentials-router"
     },
     {
