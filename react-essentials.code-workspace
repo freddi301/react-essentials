@@ -1,9 +1,6 @@
 {
   "folders": [
     {
-      "path": "packages/react-essentials-router"
-    },
-    {
       "path": "packages/react-essentials-ui"
     }
   ],
